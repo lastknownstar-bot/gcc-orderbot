@@ -1,0 +1,30 @@
+{
+  "name": "gcc-orderbot",
+  "version": "1.0.0",
+  "description": "Hyper-local WhatsApp & Instagram Conversational Sales Agent for GCC merchants (Bahrain, KSA, UAE)",
+  "main": "server/index.ts",
+  "scripts": {
+    "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "server:dev": "tsx watch server/index.ts",
+    "client:dev": "npm --prefix client run dev",
+    "client:build": "npm --prefix client run build",
+    "start": "tsx server/index.ts"
+  },
+  "keywords": ["whatsapp", "gcc", "bahrain", "benefitpay", "tap-payments", "conversational-ai", "gemini"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/genai": "^0.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.9",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}
