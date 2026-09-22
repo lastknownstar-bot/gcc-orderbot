@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Settings, Check, Globe } from 'lucide-react';
+import { X, Settings, Check, Globe, Server } from 'lucide-react';
 import { MerchantSettings } from '../types';
 import { Language, translations } from '../i18n';
+import { getSavedCustomApiBaseUrl, setCustomApiBaseUrl } from '../config';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     deliveryFee: settings.deliveryFee,
     benefitPayIban: settings.benefitPayIban,
   });
+  const [backendUrl, setBackendUrl] = useState(getSavedCustomApiBaseUrl() || (import.meta.env.VITE_API_BASE_URL || ''));
   const [isSaving, setIsSaving] = useState(false);
   const t = translations[lang];
 
@@ -33,6 +35,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
+    setCustomApiBaseUrl(backendUrl);
     await onSave(formData);
     setIsSaving(false);
     onClose();
@@ -138,6 +141,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 dir="ltr"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+              <Server className="w-3.5 h-3.5 text-sky-400" />
+              <span>{lang === 'ar' ? 'رابط خادم الواجهة الخلفية (Backend API Base URL):' : 'Backend API Base URL (Render / Vercel):'}</span>
+            </label>
+            <input
+              type="text"
+              value={backendUrl}
+              onChange={(e) => setBackendUrl(e.target.value)}
+              placeholder="https://gcc-orderbot.onrender.com (leave empty for relative / local)"
+              className="w-full bg-slate-800 border border-slate-700 text-xs text-white p-2.5 rounded-xl focus:outline-none focus:border-emerald-500 font-mono"
+              dir="ltr"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">
+              {lang === 'ar'
+                ? 'استخدم هذا الحقل لربط واجهة Vercel بخادم Render إذا لم يتم تعيين VITE_API_BASE_URL في بيئة Vercel.'
+                : 'Connect your Vercel frontend to your Render backend if VITE_API_BASE_URL is not set in Vercel.'}
+            </p>
           </div>
 
           <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-1">

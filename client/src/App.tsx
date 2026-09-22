@@ -14,6 +14,8 @@ import { CatalogModal } from './components/CatalogModal';
 import { SettingsModal } from './components/SettingsModal';
 import { Order, Conversation, Product, MerchantSettings } from './types';
 import { Language, translations } from './i18n';
+import { apiUrl, getApiBaseUrl, setCustomApiBaseUrl, getSavedCustomApiBaseUrl } from './config';
+import { AlertTriangle, Globe } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [lang, setLang] = useState<Language>('en'); // Default to English as requested
@@ -50,6 +52,8 @@ export const App: React.FC = () => {
     geminiActive: false,
     status: 'ok',
   });
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [customApiUrlInput, setCustomApiUrlInput] = useState<string>(getSavedCustomApiBaseUrl());
 
   // Keep html direction in sync with language
   useEffect(() => {
@@ -62,12 +66,16 @@ export const App: React.FC = () => {
     try {
       setIsRefreshing(true);
       const [ordersRes, convsRes, prodsRes, settingsRes, healthRes] = await Promise.all([
-        fetch('/api/orders'),
-        fetch('/api/conversations'),
-        fetch('/api/products'),
-        fetch('/api/merchant/settings'),
-        fetch('/api/health'),
+        fetch(apiUrl('/api/orders')),
+        fetch(apiUrl('/api/conversations')),
+        fetch(apiUrl('/api/products')),
+        fetch(apiUrl('/api/merchant/settings')),
+        fetch(apiUrl('/api/health')),
       ]);
+
+      if (!healthRes.ok) {
+        throw new Error(`Server returned status ${healthRes.status}`);
+      }
 
       const [ordersData, convsData, prodsData, settingsData, healthData] = await Promise.all([
         ordersRes.json(),
@@ -86,8 +94,10 @@ export const App: React.FC = () => {
       if (prodsData.products) setProducts(prodsData.products);
       if (settingsData.settings) setSettings(settingsData.settings);
       if (healthData) setSystemHealth({ geminiActive: healthData.geminiActive, status: healthData.status });
-    } catch (err) {
-      console.error('Failed to load initial data:', err);
+      setConnectionError(null);
+    } catch (err: any) {
+      console.error('Failed to load data from backend:', err);
+      setConnectionError(err.message || 'Cannot reach backend server');
     } finally {
       setIsRefreshing(false);
     }
@@ -97,12 +107,12 @@ export const App: React.FC = () => {
     fetchData();
     // Lightweight polling every 3 seconds for real-time dashboard updates
     const timer = setInterval(() => {
-      fetch('/api/orders')
+      fetch(apiUrl('/api/orders'))
         .then((r) => r.json())
         .then((d) => d.orders && setOrders(d.orders))
         .catch(() => {});
 
-      fetch('/api/conversations')
+      fetch(apiUrl('/api/conversations'))
         .then((r) => r.json())
         .then((d) => {
           if (d.conversations) {
@@ -121,7 +131,7 @@ export const App: React.FC = () => {
   const handleSendMessage = async (text: string) => {
     setIsLoadingMessage(true);
     try {
-      const res = await fetch('/api/chat/simulate', {
+      const res = await fetch(apiUrl('/api/chat/simulate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -146,7 +156,7 @@ export const App: React.FC = () => {
   // Reset current conversation
   const handleResetChat = async () => {
     try {
-      const res = await fetch(`/api/chat/reset/${encodeURIComponent(currentPhone)}`, {
+      const res = await fetch(apiUrl(`/api/chat/reset/${encodeURIComponent(currentPhone)}`), {
         method: 'POST',
       });
       const data = await res.json();
@@ -162,7 +172,7 @@ export const App: React.FC = () => {
   // Update order status
   const handleUpdateOrderStatus = async (orderId: string, status: Order['status']) => {
     try {
-      const res = await fetch(`/api/orders/${orderId}/status`, {
+      const res = await fetch(apiUrl(`/api/orders/${orderId}/status`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
@@ -179,7 +189,7 @@ export const App: React.FC = () => {
   // Simulate payment from merchant dashboard
   const handleSimulatePayment = async (orderId: string) => {
     try {
-      const res = await fetch(`/api/orders/${orderId}/simulate-pay`, {
+      const res = await fetch(apiUrl(`/api/orders/${orderId}/simulate-pay`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ paymentMethod: 'BENEFITPAY' }),
@@ -196,7 +206,7 @@ export const App: React.FC = () => {
   // Update merchant settings
   const handleUpdateSettings = async (updated: Partial<MerchantSettings>) => {
     try {
-      const res = await fetch('/api/merchant/settings', {
+      const res = await fetch(apiUrl('/api/merchant/settings'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
@@ -214,7 +224,7 @@ export const App: React.FC = () => {
   // Update product stock
   const handleUpdateStock = async (productId: string, newStock: number) => {
     try {
-      const res = await fetch(`/api/products/${productId}`, {
+      const res = await fetch(apiUrl(`/api/products/${productId}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stock: newStock }),
@@ -327,6 +337,37 @@ export const App: React.FC = () => {
           </div>
         </div>
       </header>
+
+      {/* Vercel Cross-Domain Backend Connection Helper Banner */}
+      {connectionError && (
+        <div className="bg-amber-950/90 border-b border-amber-500/40 px-4 py-2.5 text-xs text-amber-200 flex flex-wrap items-center justify-between gap-3 z-30 shadow-md">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+            <span>
+              <strong>Backend connection issue:</strong> If deploying on Vercel, connect your Render backend URL (e.g. <code>https://gcc-orderbot.onrender.com</code>):
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={customApiUrlInput}
+              onChange={(e) => setCustomApiUrlInput(e.target.value)}
+              placeholder="https://your-backend.onrender.com"
+              className="bg-slate-900 border border-slate-700 px-3 py-1 text-xs text-white rounded-lg focus:outline-none focus:border-amber-400 font-mono w-64"
+              dir="ltr"
+            />
+            <button
+              onClick={() => {
+                setCustomApiBaseUrl(customApiUrlInput);
+                fetchData();
+              }}
+              className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-colors shadow-sm"
+            >
+              Save & Connect
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Studio View: Dual-pane Split Screen */}
       <main className="flex-1 p-3 sm:p-5 overflow-hidden flex gap-5 max-w-[1920px] w-full mx-auto">

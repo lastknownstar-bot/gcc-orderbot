@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { X, CheckCircle2, ShieldCheck, Smartphone } from 'lucide-react';
 import { Language, translations } from '../i18n';
+import { apiUrl } from '../config';
 
 interface BenefitPayModalProps {
   isOpen: boolean;
@@ -40,7 +41,7 @@ export const BenefitPayModal: React.FC<BenefitPayModalProps> = ({
     setIsProcessing(true);
     try {
       if (orderId) {
-        const res = await fetch('/api/webhook/payment-status', {
+        const res = await fetch(apiUrl('/api/webhook/payment-status'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
