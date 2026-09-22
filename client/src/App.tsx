@@ -25,7 +25,7 @@ export const App: React.FC = () => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [settings, setSettings] = useState<MerchantSettings>({
-    name: 'Al-Ameed Roastery & Sweets (العميد للحلويات والقهوة)',
+    name: 'Maison de Sucre (ميزون دو سوكر)',
     country: 'BH',
     currency: 'BHD',
     deliveryFee: 1.000,

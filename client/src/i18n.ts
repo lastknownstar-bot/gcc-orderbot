@@ -28,12 +28,12 @@ export const translations = {
     
     // Quick prompts
     prompts: [
-      { label: '👋 هلا والله', text: 'هلا والله، شنو المنيو والعروض عندكم اليوم؟' },
-      { label: '☕ 2 كرك و 1 كنافة', text: 'أبي 2 بوكس كرك و 1 بوكس ميني كنافة' },
-      { label: '📍 عنوان الرفاع', text: 'التوصيل للبحرين، الرفاع الغربي، مجمع 912، طريق 1402، مبنى 55' },
-      { label: '💳 ادفع بينفت باي', text: 'طرش لي رابط الدفع بينفت باي' },
-      { label: '🇸🇦 طلب للرياض', text: 'أبي درزن معمول و قهوة سعودية للرياض حي العليا' },
-      { label: '🇬🇧 English Order', text: 'Hello! I want 2 Karak boxes and 1 Kunafa delivered to Seef' },
+      { label: '🎉 زوارة الأهل', text: 'عندنا زوارة وجمعة عائلية اليوم، شنو تنصحيني أطلب؟' },
+      { label: '🎂 كيكة شوكولاتة', text: 'أبي أطلب كيكة الشوكولاتة الملكية الفاخرة' },
+      { label: '🥐 معجنات وكرك', text: 'أبي بوكس معجنات ميني للجمعات و بوكس كرك ميزون' },
+      { label: '📍 عنوان الرفاع', text: 'المنطقة: الرفاع الغربي، مجمع 912، طريق 1402، مبنى 55' },
+      { label: '💳 دفع بينفت فوري+', text: 'طرش لي رابط الدفع بينفت باي فوري+' },
+      { label: '🇮🇳 Hindi Test', text: 'Namaste! Kya aapke paas party ke liye pastry box hai?' },
     ],
 
     // Merchant Dashboard
@@ -174,12 +174,12 @@ export const translations = {
     
     // Quick prompts
     prompts: [
-      { label: '👋 Hello / Menu', text: 'Hello! What is on your menu and any offers today?' },
-      { label: '☕ 2 Karak & 1 Kunafa', text: 'I want 2 luxury Karak boxes and 1 mini Kunafa bites box' },
-      { label: '📍 Riffa Address', text: 'Delivery to Bahrain, West Riffa, Block 912, Road 1402, Bldg 55' },
-      { label: '💳 Pay BenefitPay', text: 'Please send me the BenefitPay payment link' },
-      { label: '🇸🇦 Riyadh Order', text: 'I want 1 box of Maamoul and Saudi Gahwa delivered to Riyadh, Olaya' },
-      { label: '🇧🇭 عربي (Khaleeji)', text: 'هلا والله، أبي 2 بوكس كرك و 1 كنافة' },
+      { label: '🎉 Gathering Box', text: 'We have a family gathering (زوارة) today, what do you recommend?' },
+      { label: '🎂 Royal Cake', text: 'I want to order the Maison Royal Chocolate Truffle Cake' },
+      { label: '🥐 Pastry & Karak', text: 'I want 1 Mini Pastry Gathering Box and 1 Signature Karak Box' },
+      { label: '📍 Riffa Address', text: 'Area: West Riffa, Block: 912, Road: 1402, Building: 55' },
+      { label: '💳 BenefitPay Fawri+', text: 'Please send me the BenefitPay Fawri+ link' },
+      { label: '🇧🇭 Khaleeji Test', text: 'هلا لولوة، أبي بوكس معجنات للجمعة' },
     ],
 
     // Merchant Dashboard

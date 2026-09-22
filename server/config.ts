@@ -9,7 +9,7 @@ export const config = {
   whatsappPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || 'mock_phone_id_100234',
   whatsappAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || '',
   merchant: {
-    name: process.env.MERCHANT_NAME || 'Al-Ameed Roastery & Sweets (العميد للحلويات والقهوة)',
+    name: process.env.MERCHANT_NAME || 'Maison de Sucre (ميزون دو سوكر)',
     defaultCountry: process.env.DEFAULT_COUNTRY || 'BH',
     defaultCurrency: (process.env.DEFAULT_CURRENCY || 'BHD') as 'BHD' | 'SAR' | 'AED',
     defaultDeliveryFee: parseFloat(process.env.DEFAULT_DELIVERY_FEE || '1.000'),

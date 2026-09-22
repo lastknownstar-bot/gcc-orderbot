@@ -40,25 +40,25 @@ class InMemoryStore {
       customerName: 'فاطمة الكعبي (Fatima Al-Kaabi)',
       items: [
         {
-          productId: 'prod_karak',
-          productNameAr: 'بوكس شاي كرك فاخر (12 كوب)',
-          productNameEn: 'Luxury Karak Chai Box (12 Cups)',
+          productId: 'prod_karak_box',
+          productNameAr: 'بوكس كرك ميزون الفاخر (Signature Karak Box)',
+          productNameEn: 'Signature Karak Box (12 Cups)',
           quantity: 2,
-          unitPrice: 1.800,
-          totalPrice: 3.600,
+          unitPrice: 2.200,
+          totalPrice: 4.400,
         },
         {
           productId: 'prod_kunafa_bites',
-          productNameAr: 'بوكس ميني كنافة جبن وقشطة (16 حبة)',
+          productNameAr: 'بوكس ميني كنافة جبن وقشطة ميزون (16 حبة)',
           productNameEn: 'Mini Kunafa Bites Box (16 Pcs)',
           quantity: 1,
           unitPrice: 4.500,
           totalPrice: 4.500,
         }
       ],
-      subtotal: 8.100,
+      subtotal: 8.900,
       deliveryFee: 1.000,
-      total: 9.100,
+      total: 9.900,
       currency: 'BHD',
       status: 'PAID',
       deliveryAddress: {
