@@ -11,20 +11,43 @@ export const chatRouter = Router();
  */
 chatRouter.post('/simulate', async (req, res) => {
   try {
-    const { phone = '+97339887766', name = 'محمد الدوسري (Mohamed Al-Doseri)', text } = req.body;
+    const { 
+      phone = '+97339887766', 
+      name = 'محمد الدوسري (Mohamed Al-Doseri)', 
+      text,
+      buttonAction,
+      buttonPayload,
+      mediaType
+    } = req.body;
 
-    if (!text || typeof text !== 'string') {
-      return res.status(400).json({ error: 'Message text is required' });
+    if (!text && !buttonAction) {
+      return res.status(400).json({ error: 'Message text or buttonAction is required' });
     }
+
+    const messageText = text || buttonAction;
 
     // 1. Record incoming customer message
     store.addMessage(phone, {
       sender: 'user',
-      text,
+      text: messageText,
+      mediaType: mediaType || 'text',
+      metadata: buttonAction ? { buttonAction, buttonPayload } : undefined,
     });
 
-    // 2. Call Gemini AI Agent
-    const agentOutput = await GeminiAgentService.processMessage(phone, name, text);
+    // 2. Call Gemini AI Agent (or button interceptor)
+    let processedText = messageText;
+    if (buttonAction === 'ADD_TO_CART' && buttonPayload) {
+      const p = store.getProductById(buttonPayload);
+      processedText = p ? `أبي ${p.name_ar}` : `أبي أطلب ${buttonPayload}`;
+    } else if (buttonAction === 'CONFIRM_PLAQUE') {
+      processedText = buttonPayload === 'YES' ? 'نعم، أريد كتابة عبارة إهداء على لوح الشوكولاتة' : 'لا بدون عبارة';
+    } else if (buttonAction === 'SHARE_LOCATION') {
+      processedText = 'موقعي: الرفاع الغربي مجمع 912 طريق 1402 مبنى 55';
+    } else if (buttonAction === 'CHECKOUT') {
+      processedText = buttonPayload === 'APPLEPAY' ? 'أبي أدفع عن طريق Apple Pay' : 'أبي أدفع بينفت باي فوري+';
+    }
+
+    const agentOutput = await GeminiAgentService.processMessage(phone, name, processedText);
 
     const conv = store.getOrCreateConversation(phone);
     const settings = store.getMerchantSettings();
@@ -79,11 +102,24 @@ chatRouter.post('/simulate', async (req, res) => {
       store.updateConversationAddress(phone, agentOutput.extractedAddress);
     }
 
+    // Update conversation metadata (Gift, Plaque, Human Attention)
+    if (agentOutput.isGift) {
+      store.updateConversationData(phone, { isGift: true });
+    }
+    if (agentOutput.chocolatePlaqueMessage) {
+      store.updateConversationData(phone, { chocolatePlaqueMessage: agentOutput.chocolatePlaqueMessage });
+    }
+    if (agentOutput.needsHumanAttention) {
+      store.updateConversationData(phone, { needsHumanAttention: true, assignedAgent: 'HUMAN' });
+    }
+
     // 5. Check if Ready for Payment Checkout
     let paymentPayload: any = undefined;
     const updatedConv = store.getOrCreateConversation(phone);
 
     if (agentOutput.readyForCheckout && updatedConv.cart.items.length > 0) {
+      const paymentMethod = (agentOutput.suggestedPayment === 'APPLEPAY' ? 'APPLEPAY' : agentOutput.suggestedPayment === 'TAP' ? 'TAP' : 'BENEFITPAY');
+
       // Create or reuse pending order
       const order = store.createOrder({
         customerPhone: phone,
@@ -95,12 +131,17 @@ chatRouter.post('/simulate', async (req, res) => {
         currency: settings.currency,
         status: 'PENDING_PAYMENT',
         deliveryAddress: updatedConv.address,
-        paymentMethod: (agentOutput.suggestedPayment === 'TAP' ? 'TAP' : 'BENEFITPAY'),
+        paymentMethod,
+        isGift: updatedConv.isGift || agentOutput.isGift,
+        giftRecipientName: updatedConv.giftRecipientName || agentOutput.giftRecipientName,
+        giftRecipientPhone: updatedConv.giftRecipientPhone || agentOutput.giftRecipientPhone,
+        giftCardMessage: updatedConv.giftCardMessage || agentOutput.giftCardMessage,
+        chocolatePlaqueMessage: updatedConv.chocolatePlaqueMessage || agentOutput.chocolatePlaqueMessage,
       });
 
       updatedConv.currentOrderId = order.id;
 
-      // Generate dynamic payment link (BenefitPay / Tap)
+      // Generate dynamic payment link (BenefitPay / Tap / ApplePay)
       if (order.paymentMethod === 'BENEFITPAY') {
         const benefitInfo = PaymentService.generateBenefitPayLink(order);
         paymentPayload = {
@@ -110,6 +151,15 @@ chatRouter.post('/simulate', async (req, res) => {
           qrCodeText: benefitInfo.qrCodeText,
           paymentUrl: benefitInfo.paymentUrl,
           reference: benefitInfo.reference,
+        };
+      } else if (order.paymentMethod === 'APPLEPAY') {
+        const tapInfo = PaymentService.generateTapLink(order);
+        paymentPayload = {
+          type: 'APPLEPAY',
+          amount: tapInfo.amount,
+          currency: tapInfo.currency,
+          paymentUrl: tapInfo.paymentUrl,
+          reference: `APL-${order.orderNumber}`,
         };
       } else {
         const tapInfo = PaymentService.generateTapLink(order);
@@ -128,9 +178,16 @@ chatRouter.post('/simulate', async (req, res) => {
       sender: 'bot',
       text: agentOutput.replyText,
       paymentPayload,
+      mediaType: agentOutput.mediaType,
+      mediaUrl: agentOutput.mediaUrl,
+      mediaData: agentOutput.mediaData,
+      interactiveButtons: agentOutput.interactiveButtons,
       metadata: {
         intent: agentOutput.intent,
         readyForCheckout: agentOutput.readyForCheckout,
+        isGift: agentOutput.isGift,
+        needsHumanAttention: agentOutput.needsHumanAttention,
+        chocolatePlaqueMessage: agentOutput.chocolatePlaqueMessage,
       }
     });
 
@@ -161,5 +218,20 @@ chatRouter.get('/history/:phone', (req, res) => {
 chatRouter.post('/reset/:phone', (req, res) => {
   const phone = req.params.phone;
   const conv = store.resetConversation(phone);
+  return res.json({ success: true, conversation: conv });
+});
+
+/**
+ * Human agent takeover / resolve endpoint
+ */
+chatRouter.post('/handoff/:phone', (req, res) => {
+  const phone = req.params.phone;
+  const { resolve = false } = req.body;
+  
+  const conv = store.updateConversationData(phone, {
+    needsHumanAttention: !resolve,
+    assignedAgent: resolve ? 'BOT' : 'HUMAN',
+  });
+
   return res.json({ success: true, conversation: conv });
 });

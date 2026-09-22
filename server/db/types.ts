@@ -33,6 +33,7 @@ export interface DeliveryAddress {
   flat?: string;
   notes?: string;
   rawText?: string;
+  coordinates?: { lat: number; lng: number };
 }
 
 export interface Order {
@@ -47,12 +48,26 @@ export interface Order {
   currency: 'BHD' | 'SAR' | 'AED';
   status: 'PENDING_PAYMENT' | 'PAID' | 'DISPATCHED' | 'CANCELLED';
   deliveryAddress: DeliveryAddress;
-  paymentMethod: 'BENEFITPAY' | 'TAP' | 'MYFATOORAH' | 'CASH';
+  paymentMethod: 'BENEFITPAY' | 'TAP' | 'APPLEPAY' | 'MYFATOORAH' | 'CASH';
   paymentLink?: string;
   paymentReference?: string;
   paidAt?: string;
   createdAt: string;
   updatedAt: string;
+  isGift?: boolean;
+  giftRecipientName?: string;
+  giftRecipientPhone?: string;
+  giftCardMessage?: string;
+  chocolatePlaqueMessage?: string;
+  deliveryTimeSlot?: string;
+}
+
+export interface InteractiveButton {
+  id: string;
+  title: string;
+  action: 'ADD_TO_CART' | 'CONFIRM_PLAQUE' | 'DECLINE_PLAQUE' | 'CHECKOUT' | 'SHARE_LOCATION' | 'REQUEST_HUMAN' | 'CUSTOM';
+  payload?: string;
+  variant?: 'primary' | 'secondary' | 'gold';
 }
 
 export interface ChatMessage {
@@ -60,8 +75,21 @@ export interface ChatMessage {
   sender: 'user' | 'bot' | 'system';
   text: string;
   timestamp: string;
+  mediaType?: 'text' | 'image' | 'audio' | 'location' | 'interactive_buttons';
+  mediaUrl?: string;
+  mediaData?: {
+    title?: string;
+    subtitle?: string;
+    price?: string;
+    productId?: string;
+    coordinates?: { lat: number; lng: number };
+    duration?: string;
+    audioText?: string;
+    mapPreview?: string;
+  };
+  interactiveButtons?: InteractiveButton[];
   paymentPayload?: {
-    type: 'BENEFITPAY' | 'TAP';
+    type: 'BENEFITPAY' | 'TAP' | 'APPLEPAY';
     amount: number;
     currency: string;
     qrCodeText?: string;
@@ -87,6 +115,13 @@ export interface Conversation {
   address: DeliveryAddress;
   currentOrderId?: string;
   lastActive: string;
+  assignedAgent?: 'BOT' | 'HUMAN';
+  needsHumanAttention?: boolean;
+  isGift?: boolean;
+  giftRecipientName?: string;
+  giftRecipientPhone?: string;
+  giftCardMessage?: string;
+  chocolatePlaqueMessage?: string;
 }
 
 export interface MerchantSettings {
@@ -101,5 +136,6 @@ export interface MerchantSettings {
     tap: boolean;
     myfatoorah: boolean;
     shopifySync: boolean;
+    applePay?: boolean;
   };
 }

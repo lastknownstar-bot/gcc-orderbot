@@ -13,7 +13,7 @@ export const initialProducts: Product[] = [
     image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600&auto=format&fit=crop&q=80',
     description_ar: 'تشكيلة معجنات فرنسية وخليجية ميني فاخرة مثالية للزوارة وجمعات العائلة والضيوف.',
     description_en: 'Assortment of luxury French & Gulf mini savories, perfect for family gatherings, parties, and visits.',
-    keywords: ['معجنات', 'بوكس معجنات', 'pastry', 'pastries', 'gathering', 'gathering box', 'زواره', 'زوارة', 'جمعة', 'جمعات', 'حفلة']
+    keywords: ['معجنات', 'بوكس معجنات', 'pastry', 'pastries', 'gathering box', 'ميني معجنات']
   },
   {
     id: 'prod_karak_box',

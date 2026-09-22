@@ -13,15 +13,25 @@ import {
   Sparkles,
   ShoppingBag,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  MapPin,
+  Play,
+  Pause,
+  Plus,
+  Volume2,
+  Gift,
+  Cake,
+  Apple
 } from 'lucide-react';
-import { Conversation } from '../types';
+import { Conversation, InteractiveButton } from '../types';
 import { BenefitPayModal } from './BenefitPayModal';
 import { Language, translations } from '../i18n';
+import { soundEngine } from '../utils/audio';
 
 interface WhatsAppSimulatorProps {
   conversation: Conversation | null;
-  onSendMessage: (text: string) => Promise<void>;
+  onSendMessage: (text: string, mediaType?: 'text' | 'location') => Promise<void>;
+  onButtonClick?: (action: string, payload?: string, title?: string) => Promise<void>;
   onResetChat: () => void;
   isLoading: boolean;
   storeName: string;
@@ -33,6 +43,7 @@ interface WhatsAppSimulatorProps {
 export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
   conversation,
   onSendMessage,
+  onButtonClick,
   onResetChat,
   isLoading,
   storeName,
@@ -41,6 +52,7 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
   lang = 'ar',
 }) => {
   const [inputText, setInputText] = useState('');
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [activePaymentModal, setActivePaymentModal] = useState<{
     isOpen: boolean;
     orderId?: string;
@@ -48,10 +60,12 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
     amount: number;
     reference: string;
     qrPayload?: string;
+    initialMethod?: 'BENEFITPAY' | 'APPLEPAY';
   }>({
     isOpen: false,
     amount: 0,
     reference: '',
+    initialMethod: 'BENEFITPAY',
   });
 
   const t = translations[lang];
@@ -73,9 +87,35 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
     onSendMessage(text);
   };
 
+  const handleLocationClick = () => {
+    onSendMessage('موقعي: الرفاع الغربي مجمع 912 طريق 1402 مبنى 55', 'location');
+  };
+
+  const handlePlayVoiceNote = () => {
+    if (isPlayingAudio) return;
+    setIsPlayingAudio(true);
+    soundEngine.playVoiceNoteDemo(() => {
+      setIsPlayingAudio(false);
+    });
+  };
+
+  const handleInteractiveButtonClick = (btn: InteractiveButton) => {
+    if (onButtonClick) {
+      onButtonClick(btn.action, btn.payload, btn.title);
+    } else {
+      if (btn.action === 'SHARE_LOCATION') {
+        handleLocationClick();
+      } else if (btn.action === 'CHECKOUT') {
+        onSendMessage(btn.payload === 'APPLEPAY' ? 'أبي أدفع عبر Apple Pay' : 'أبي أدفع عبر BenefitPay');
+      } else {
+        onSendMessage(btn.title);
+      }
+    }
+  };
+
   const quickPrompts = t.prompts;
 
-  // Helper to format whatsapp markdown bold (*bold* -> <strong>bold</strong>)
+  // Format whatsapp markdown bold (*bold* -> <strong>bold</strong>)
   const formatWhatsAppText = (content: string) => {
     const lines = content.split('\n');
     return lines.map((line, idx) => {
@@ -101,7 +141,7 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
 
   return (
     <div 
-      className="flex flex-col h-full bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative"
+      className="flex flex-col h-full bg-slate-950 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative"
       dir={lang === 'ar' ? 'rtl' : 'ltr'}
     >
       {/* WhatsApp Header */}
@@ -111,7 +151,7 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
             <img
               src="https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=100&auto=format&fit=crop&q=80"
               alt="Avatar"
-              className="w-10 h-10 rounded-full object-cover border-2 border-emerald-400"
+              className="w-10 h-10 rounded-full object-cover border-2 border-amber-400"
             />
             <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-400 border-2 border-slate-900 rounded-full" />
           </div>
@@ -129,7 +169,16 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-slate-200">
+        <div className="flex items-center gap-1.5 text-slate-200">
+          <button
+            onClick={handlePlayVoiceNote}
+            title={t.voiceNoteTooltip}
+            className={`p-2 rounded-full transition-all ${
+              isPlayingAudio ? 'bg-amber-500 text-slate-950 animate-pulse' : 'hover:bg-white/10 text-amber-300'
+            }`}
+          >
+            <Volume2 className="w-4 h-4" />
+          </button>
           <button
             onClick={onResetChat}
             title="Reset Chat Session"
@@ -147,7 +196,7 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
       </div>
 
       {/* Quick Testing Prompts Bar */}
-      <div className="bg-slate-950/80 backdrop-blur border-b border-slate-800 p-2.5 overflow-x-auto flex gap-1.5 no-scrollbar z-10">
+      <div className="bg-slate-900/90 backdrop-blur border-b border-slate-800 p-2 overflow-x-auto flex gap-1.5 no-scrollbar z-10">
         <div className="flex items-center gap-1 text-[11px] text-amber-400 font-semibold px-1.5 shrink-0">
           <Sparkles className="w-3.5 h-3.5" />
           <span>{t.quickTestsLabel}</span>
@@ -164,44 +213,121 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         ))}
       </div>
 
-      {/* WhatsApp Message Body */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 whatsapp-bg relative">
-        {/* Date Pill */}
-        <div className="flex justify-center my-1">
-          <span className="bg-slate-800/90 text-slate-400 text-[11px] px-3 py-0.5 rounded-lg border border-slate-700/50 shadow-sm">
+      {/* WhatsApp Message Body with Authentic Doodle Background Pattern */}
+      <div 
+        className="flex-1 overflow-y-auto p-4 space-y-3 relative"
+        style={{
+          backgroundColor: '#0b141a',
+          backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px)`,
+          backgroundSize: '20px 20px',
+        }}
+      >
+        {/* Today Pill & Encryption Notice */}
+        <div className="flex flex-col items-center gap-2 mb-3">
+          <span className="bg-slate-800/80 text-slate-400 text-[10px] px-3 py-0.5 rounded-full font-medium">
             {t.todayPill}
           </span>
-        </div>
-
-        {/* Security message */}
-        <div className="flex justify-center my-1">
-          <span className="bg-amber-500/10 text-amber-300 text-[10px] px-3 py-1 rounded-lg border border-amber-500/20 max-w-xs text-center">
+          <div className="bg-[#182229] border border-amber-500/20 text-amber-200/90 text-[11px] px-4 py-2 rounded-xl text-center max-w-sm shadow-sm leading-relaxed">
             {t.encryptionNotice}
-          </span>
+          </div>
         </div>
 
-        {messages.length === 0 && (
-          <div className="text-center py-12 text-slate-400 text-xs">
-            <p className="mb-2">{t.emptyChatPrompt}</p>
-            <p className="text-[11px] text-slate-500">"{lang === 'ar' ? 'أبي 2 بوكس كرك و 1 كنافة' : 'I want 2 Karak boxes and 1 Kunafa'}"</p>
+        {/* Voice Note Demonstration Banner */}
+        <div className="flex justify-start">
+          <div className="bg-[#202c33] rounded-2xl rounded-bl-none p-3 border border-amber-500/30 max-w-[85%] shadow-lg">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handlePlayVoiceNote}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                  isPlayingAudio ? 'bg-amber-400 text-slate-900 animate-pulse' : 'bg-emerald-500 text-white'
+                }`}
+              >
+                {isPlayingAudio ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+              </button>
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-amber-300">{t.voiceNoteLabel}</span>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded-full font-mono">
+                    Lulwa Concierge
+                  </span>
+                </div>
+                {/* Audio Waveform visualization */}
+                <div className="flex items-center gap-0.5 h-3">
+                  {[4, 8, 12, 6, 14, 10, 8, 16, 12, 6, 10, 8, 14, 4, 10, 6].map((h, i) => (
+                    <span 
+                      key={i} 
+                      className={`w-1 rounded-full transition-all duration-300 ${
+                        isPlayingAudio ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'
+                      }`}
+                      style={{ height: `${isPlayingAudio ? Math.min(16, h * 1.3) : h}px` }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
-        )}
+        </div>
 
+        {/* Conversation Message List */}
         {messages.map((msg) => {
           const isUser = msg.sender === 'user';
           return (
             <div
               key={msg.id}
-              className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} transition-all`}
+              className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
             >
               <div
-                className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm shadow-md relative ${
+                className={`max-w-[85%] sm:max-w-[78%] rounded-2xl px-3.5 py-2.5 shadow-md relative ${
                   isUser
                     ? 'bg-[#005c4b] text-emerald-50 rounded-br-none'
                     : 'bg-[#202c33] text-slate-100 rounded-bl-none border border-slate-700/40'
                 }`}
                 dir="auto"
               >
+                {/* Rich Image Card Attachment */}
+                {msg.mediaType === 'image' && msg.mediaUrl && (
+                  <div className="mb-2.5 overflow-hidden rounded-xl border border-amber-500/30 bg-slate-950/60">
+                    <img 
+                      src={msg.mediaUrl} 
+                      alt={msg.mediaData?.title || 'Delicacy'} 
+                      className="w-full h-36 object-cover"
+                    />
+                    <div className="p-2.5 flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-xs text-amber-300">{msg.mediaData?.title}</h4>
+                        <span className="text-[11px] font-mono text-emerald-400 font-bold">{msg.mediaData?.price}</span>
+                      </div>
+                      {msg.mediaData?.productId && (
+                        <button
+                          onClick={() => handleInteractiveButtonClick({
+                            id: 'btn_add_card',
+                            title: `أضف ${msg.mediaData?.title}`,
+                            action: 'ADD_TO_CART',
+                            payload: msg.mediaData?.productId
+                          })}
+                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs flex items-center gap-1 active:scale-95 transition-transform"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>إضافة</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* GPS Location Pin Card */}
+                {msg.mediaType === 'location' && (
+                  <div className="mb-2.5 p-3 rounded-xl bg-slate-900/90 border border-emerald-500/40 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                      <MapPin className="w-5 h-5" />
+                    </div>
+                    <div className="text-xs">
+                      <span className="font-bold text-white block">{t.locationSharedTitle}</span>
+                      <span className="text-slate-400 text-[11px]">26.1155° N, 50.5577° E • Block 912</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Message text with formatting */}
                 <div className="text-[13px] leading-relaxed break-words">
                   {formatWhatsAppText(msg.text)}
@@ -213,14 +339,14 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-white flex items-center gap-1.5">
                         <CreditCard className="w-3.5 h-3.5 text-rose-400" />
-                        {msg.paymentPayload.type === 'BENEFITPAY' ? 'BenefitPay (Fawri+)' : 'Tap GCC Checkout'}
+                        {msg.paymentPayload.type === 'APPLEPAY' ? ' Apple Pay Express' : 'BenefitPay (Fawri+)'}
                       </span>
                       <span className="font-mono text-emerald-400 font-bold" dir="ltr">
                         {msg.paymentPayload.amount.toFixed(msg.paymentPayload.currency === 'BHD' ? 3 : 2)} {msg.paymentPayload.currency}
                       </span>
                     </div>
 
-                    {msg.paymentPayload.type === 'BENEFITPAY' ? (
+                    <div className="flex gap-2">
                       <button
                         onClick={() =>
                           setActivePaymentModal({
@@ -230,25 +356,31 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
                             amount: msg.paymentPayload?.amount || 0,
                             reference: msg.paymentPayload?.reference || '',
                             qrPayload: msg.paymentPayload?.qrCodeText,
+                            initialMethod: 'BENEFITPAY',
                           })
                         }
-                        className="w-full py-2 px-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-semibold text-xs rounded-xl shadow-md flex items-center justify-center gap-2 transition-all active:scale-95"
+                        className="flex-1 py-2 px-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-semibold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all active:scale-95"
                       >
                         <QrCode className="w-3.5 h-3.5" />
-                        <span>{t.openBenefitPayQR}</span>
-                        <ChevronRight className="w-3.5 h-3.5 rtl:rotate-180" />
+                        <span>BenefitPay</span>
                       </button>
-                    ) : (
-                      <a
-                        href={msg.paymentPayload.paymentUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-all text-center"
+
+                      <button
+                        onClick={() =>
+                          setActivePaymentModal({
+                            isOpen: true,
+                            orderId: conversation?.currentOrderId,
+                            orderNumber: msg.paymentPayload?.reference,
+                            amount: msg.paymentPayload?.amount || 0,
+                            reference: msg.paymentPayload?.reference || '',
+                            initialMethod: 'APPLEPAY',
+                          })
+                        }
+                        className="flex-1 py-2 px-3 bg-white hover:bg-slate-100 text-black font-bold text-xs rounded-xl shadow-md flex items-center justify-center gap-1 transition-all active:scale-95"
                       >
-                        <span>{t.payWithTap}</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    )}
+                        <span> Pay</span>
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -260,6 +392,31 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
                   {isUser && <CheckCheck className="w-3.5 h-3.5 text-sky-400" />}
                 </div>
               </div>
+
+              {/* Interactive WhatsApp Quick Action Buttons underneath Bot Bubble */}
+              {!isUser && msg.interactiveButtons && msg.interactiveButtons.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-1.5 max-w-[85%]">
+                  {msg.interactiveButtons.map((btn) => (
+                    <button
+                      key={btn.id}
+                      onClick={() => handleInteractiveButtonClick(btn)}
+                      disabled={isLoading}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all active:scale-95 flex items-center gap-1.5 shadow-sm border ${
+                        btn.variant === 'gold'
+                          ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40'
+                          : btn.variant === 'primary'
+                          ? 'bg-emerald-600/30 hover:bg-emerald-600/40 text-emerald-300 border-emerald-500/40'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      }`}
+                    >
+                      {btn.action === 'SHARE_LOCATION' && <MapPin className="w-3 h-3 text-amber-400" />}
+                      {btn.action === 'ADD_TO_CART' && <Plus className="w-3 h-3 text-emerald-400" />}
+                      {btn.action === 'CONFIRM_PLAQUE' && <Cake className="w-3 h-3 text-rose-400" />}
+                      <span>{btn.title}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -278,7 +435,7 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
 
       {/* Floating Active Cart preview at bottom of chat */}
       {conversation?.cart && conversation.cart.items.length > 0 && (
-        <div className="bg-slate-800/95 backdrop-blur px-4 py-2 border-t border-slate-700/80 flex items-center justify-between text-xs z-10">
+        <div className="bg-slate-900/95 backdrop-blur px-4 py-2 border-t border-slate-800 flex items-center justify-between text-xs z-10">
           <div className="flex items-center gap-2 text-slate-300">
             <ShoppingBag className="w-4 h-4 text-emerald-400" />
             <span>
@@ -291,22 +448,26 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         </div>
       )}
 
-      {/* WhatsApp Input Bar */}
+      {/* WhatsApp Input Bar with Location & Voice Tools */}
       <form
         onSubmit={handleSubmit}
         className="bg-[#1f2c34] p-3 flex items-center gap-2 border-t border-slate-800 z-10"
       >
         <button
           type="button"
-          className="text-slate-400 hover:text-slate-200 p-1.5 rounded-full hover:bg-slate-800 transition-colors"
+          onClick={handleLocationClick}
+          title={t.shareLocationTooltip}
+          className="text-amber-400 hover:text-amber-300 p-1.5 rounded-full hover:bg-slate-800 transition-colors"
         >
-          <Smile className="w-5 h-5" />
+          <MapPin className="w-5 h-5" />
         </button>
         <button
           type="button"
-          className="text-slate-400 hover:text-slate-200 p-1.5 rounded-full hover:bg-slate-800 transition-colors"
+          onClick={handlePlayVoiceNote}
+          title={t.voiceNoteTooltip}
+          className="text-emerald-400 hover:text-emerald-300 p-1.5 rounded-full hover:bg-slate-800 transition-colors"
         >
-          <Paperclip className="w-5 h-5" />
+          <Mic className="w-5 h-5" />
         </button>
 
         <input
@@ -329,9 +490,10 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         ) : (
           <button
             type="button"
-            className="w-10 h-10 bg-slate-800 text-slate-300 hover:text-white rounded-full flex items-center justify-center transition-colors"
+            onClick={handlePlayVoiceNote}
+            className="w-10 h-10 bg-slate-800 text-emerald-400 hover:text-white rounded-full flex items-center justify-center transition-colors"
           >
-            <Mic className="w-4 h-4" />
+            <Volume2 className="w-4 h-4" />
           </button>
         )}
       </form>
@@ -346,6 +508,7 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         currency={currency}
         reference={activePaymentModal.reference}
         qrPayload={activePaymentModal.qrPayload}
+        initialMethod={activePaymentModal.initialMethod}
         onPaymentSuccess={() => {
           if (onRefreshOrders) onRefreshOrders();
         }}

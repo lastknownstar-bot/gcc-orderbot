@@ -229,6 +229,14 @@ class InMemoryStore {
     return conv;
   }
 
+  updateConversationData(phone: string, updates: Partial<Conversation>): Conversation | undefined {
+    const conv = this.getOrCreateConversation(phone);
+    Object.assign(conv, updates);
+    conv.lastActive = new Date().toISOString();
+    this.conversations.set(phone, conv);
+    return conv;
+  }
+
   resetConversation(phone: string): Conversation {
     this.conversations.delete(phone);
     return this.getOrCreateConversation(phone);

@@ -6,7 +6,9 @@ import {
   Sparkles, 
   Smartphone, 
   LayoutDashboard, 
-  Languages
+  Languages,
+  AlertTriangle,
+  Globe
 } from 'lucide-react';
 import { WhatsAppSimulator } from './components/WhatsAppSimulator';
 import { MerchantDashboard } from './components/MerchantDashboard';
@@ -15,7 +17,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { Order, Conversation, Product, MerchantSettings } from './types';
 import { Language, translations } from './i18n';
 import { apiUrl, getApiBaseUrl, setCustomApiBaseUrl, getSavedCustomApiBaseUrl } from './config';
-import { AlertTriangle, Globe } from 'lucide-react';
+import { soundEngine } from './utils/audio';
 
 export const App: React.FC = () => {
   const [lang, setLang] = useState<Language>('en'); // Default to English as requested
@@ -36,6 +38,7 @@ export const App: React.FC = () => {
       tap: true,
       myfatoorah: false,
       shopifySync: true,
+      applePay: true,
     },
   });
 
@@ -58,10 +61,9 @@ export const App: React.FC = () => {
   // Keep html direction in sync with language
   useEffect(() => {
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
-    document.documentElement.lang = lang;
   }, [lang]);
 
-  // Fetch all initial data
+  // Load initial backend state
   const fetchData = useCallback(async () => {
     try {
       setIsRefreshing(true);
@@ -72,10 +74,6 @@ export const App: React.FC = () => {
         fetch(apiUrl('/api/merchant/settings')),
         fetch(apiUrl('/api/health')),
       ]);
-
-      if (!healthRes.ok) {
-        throw new Error(`Server returned status ${healthRes.status}`);
-      }
 
       const [ordersData, convsData, prodsData, settingsData, healthData] = await Promise.all([
         ordersRes.json(),
@@ -128,7 +126,7 @@ export const App: React.FC = () => {
   }, [fetchData, currentPhone]);
 
   // Handle customer sending a message in WhatsApp
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, mediaType?: 'text' | 'location') => {
     setIsLoadingMessage(true);
     try {
       const res = await fetch(apiUrl('/api/chat/simulate'), {
@@ -138,6 +136,7 @@ export const App: React.FC = () => {
           phone: currentPhone,
           name: currentCustomerName,
           text,
+          mediaType: mediaType || 'text',
         }),
       });
 
@@ -150,6 +149,51 @@ export const App: React.FC = () => {
       console.error('Error sending message:', err);
     } finally {
       setIsLoadingMessage(false);
+    }
+  };
+
+  // Handle interactive button click
+  const handleButtonClick = async (action: string, payload?: string, title?: string) => {
+    setIsLoadingMessage(true);
+    try {
+      const res = await fetch(apiUrl('/api/chat/simulate'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: currentPhone,
+          name: currentCustomerName,
+          text: title,
+          buttonAction: action,
+          buttonPayload: payload,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setCurrentConversation(data.conversation);
+        await fetchData();
+      }
+    } catch (err) {
+      console.error('Error triggering button action:', err);
+    } finally {
+      setIsLoadingMessage(false);
+    }
+  };
+
+  // Handle human agent takeover / resolve
+  const handleTakeoverConversation = async (phone: string, resolve: boolean) => {
+    try {
+      const res = await fetch(apiUrl(`/api/chat/handoff/${encodeURIComponent(phone)}`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolve }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchData();
+      }
+    } catch (err) {
+      console.error('Failed to update handoff:', err);
     }
   };
 
@@ -196,6 +240,7 @@ export const App: React.FC = () => {
       });
       const data = await res.json();
       if (data.success) {
+        soundEngine.playCashRegister();
         fetchData();
       }
     } catch (err) {
@@ -221,7 +266,7 @@ export const App: React.FC = () => {
     }
   };
 
-  // Update product stock
+  // Update stock level for catalog
   const handleUpdateStock = async (productId: string, newStock: number) => {
     try {
       const res = await fetch(apiUrl(`/api/products/${productId}`), {
@@ -234,93 +279,86 @@ export const App: React.FC = () => {
         fetchData();
       }
     } catch (err) {
-      console.error('Failed to update product:', err);
+      console.error('Failed to update product stock:', err);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
-      {/* Top Application Header */}
-      <header className="h-16 border-b border-slate-800 bg-slate-900/90 backdrop-blur px-4 sm:px-6 flex items-center justify-between z-30 shrink-0">
+    <div 
+      className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500/30 selection:text-amber-200"
+      dir={lang === 'ar' ? 'rtl' : 'ltr'}
+    >
+      {/* Top Main Navigation Header */}
+      <header className="bg-slate-900/90 backdrop-blur border-b border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between sticky top-0 z-30 shadow-lg">
+        {/* Brand identity */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-amber-500 p-0.5 shadow-lg shadow-emerald-500/20">
-            <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-              <Bot className="w-5 h-5 text-emerald-400" />
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-amber-600 to-yellow-500 p-0.5 shadow-lg shadow-amber-500/20">
+            <div className="w-full h-full bg-slate-900 rounded-[14px] flex items-center justify-center text-amber-400">
+              <Bot className="w-5 h-5" />
             </div>
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-sm sm:text-base tracking-tight text-white">
-                GCC-Order<span className="text-emerald-400">Bot</span>
-              </span>
-              <span className="hidden sm:inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                {t.edition}
-              </span>
+              <h1 className="font-bold text-base sm:text-lg tracking-tight text-white flex items-center gap-2">
+                <span>{t.appName}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                  {t.edition}
+                </span>
+              </h1>
             </div>
-            <p className="text-[11px] text-slate-400 leading-none hidden sm:block">
+            <p className="text-xs text-slate-400 hidden sm:block">
               {t.subTitle}
             </p>
           </div>
         </div>
 
-        {/* AI Engine Status & Quick Navigation Controls */}
+        {/* Action Controls & Language Switcher */}
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Language Switcher Button */}
+          {/* Language Switcher */}
           <button
             onClick={() => setLang(lang === 'ar' ? 'en' : 'ar')}
-            className="px-3 py-1.5 bg-gradient-to-r from-emerald-700/80 to-teal-700/80 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl border border-emerald-500/40 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
-            title="Toggle English / Arabic"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all active:scale-95 shadow-sm"
+            title="Toggle Language / تغيير اللغة"
           >
-            <Languages className="w-3.5 h-3.5 text-emerald-200" />
+            <Languages className="w-3.5 h-3.5 text-amber-400" />
             <span>{lang === 'ar' ? 'English (EN)' : 'العربية (AR)'}</span>
           </button>
 
-          {/* Gemini AI Status Badge */}
-          <div
-            className={`hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs border ${
-              systemHealth.geminiActive
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-            }`}
-            title={systemHealth.geminiActive ? 'Gemini 2.5 Flash Active' : 'Khaleeji AI Engine Active'}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>
+          {/* AI Engine Status Pill */}
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700/60 text-xs">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                systemHealth.geminiActive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+              }`}
+            />
+            <span className="text-slate-300 font-medium">
               {systemHealth.geminiActive ? t.geminiActive : t.heuristicActive}
             </span>
           </div>
 
-          {/* Currency Pill */}
-          <div className="px-2.5 py-1 bg-slate-800 border border-slate-700 rounded-xl text-xs font-mono font-bold text-amber-400 flex items-center gap-1" dir="ltr">
-            <span>{settings.currency}</span>
-            <span className="text-[10px] text-slate-400">
-              ({settings.currency === 'BHD' ? t.decimals : t.decimals2})
-            </span>
-          </div>
-
-          {/* Product Catalog Button */}
+          {/* Catalog Modal Trigger */}
           <button
             onClick={() => setIsCatalogOpen(true)}
-            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors shadow-sm"
           >
-            <Package className="w-4 h-4 text-emerald-400" />
+            <Package className="w-3.5 h-3.5 text-amber-400" />
             <span className="hidden sm:inline">{t.catalogBtn}</span>
           </button>
 
-          {/* Settings Button */}
+          {/* Settings Modal Trigger */}
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl border border-slate-700 transition-colors"
-            title="Merchant Regional Settings"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors shadow-sm"
           >
-            <SettingsIcon className="w-4 h-4" />
+            <SettingsIcon className="w-3.5 h-3.5 text-slate-400" />
+            <span className="hidden sm:inline">{t.settingsBtn}</span>
           </button>
 
-          {/* Mobile View Switcher */}
+          {/* Mobile View Toggle */}
           <div className="flex lg:hidden bg-slate-800 p-0.5 rounded-xl border border-slate-700">
             <button
               onClick={() => setActiveMobileView('chat')}
-              className={`p-1.5 rounded-lg text-xs ${
+              className={`p-1.5 rounded-lg transition-colors ${
                 activeMobileView === 'chat' ? 'bg-emerald-600 text-white' : 'text-slate-400'
               }`}
             >
@@ -328,7 +366,7 @@ export const App: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveMobileView('dashboard')}
-              className={`p-1.5 rounded-lg text-xs ${
+              className={`p-1.5 rounded-lg transition-colors ${
                 activeMobileView === 'dashboard' ? 'bg-emerald-600 text-white' : 'text-slate-400'
               }`}
             >
@@ -338,13 +376,13 @@ export const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Vercel Cross-Domain Backend Connection Helper Banner */}
+      {/* Cross-domain / Backend connection alert if needed */}
       {connectionError && (
-        <div className="bg-amber-950/90 border-b border-amber-500/40 px-4 py-2.5 text-xs text-amber-200 flex flex-wrap items-center justify-between gap-3 z-30 shadow-md">
+        <div className="bg-amber-950/80 border-b border-amber-500/40 px-4 py-2.5 text-xs text-amber-200 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
             <span>
-              <strong>Backend connection issue:</strong> If deploying on Vercel, connect your Render backend URL (e.g. <code>https://gcc-orderbot.onrender.com</code>):
+              <strong>Backend Disconnected:</strong> {connectionError}. If running frontend on Vercel, set your Render backend URL below:
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -380,6 +418,7 @@ export const App: React.FC = () => {
           <WhatsAppSimulator
             conversation={currentConversation}
             onSendMessage={handleSendMessage}
+            onButtonClick={handleButtonClick}
             onResetChat={handleResetChat}
             isLoading={isLoadingMessage}
             storeName={settings.name}
@@ -406,6 +445,7 @@ export const App: React.FC = () => {
             isRefreshing={isRefreshing}
             selectedConversationPhone={currentPhone}
             onSelectConversationPhone={(phone) => setCurrentPhone(phone)}
+            onTakeoverConversation={handleTakeoverConversation}
             lang={lang}
           />
         </div>
