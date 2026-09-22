@@ -39,7 +39,7 @@ export const BenefitPayModal: React.FC<BenefitPayModalProps> = ({
 
   if (!isOpen) return null;
 
-  const defaultQr = qrPayload || `BENEFITPAY://PAY?merchant=MAISON_DE_SUCRE&ref=${reference}&amount=${amount.toFixed(3)}&curr=${currency}`;
+  const defaultQr = qrPayload || `BENEFITPAY://PAY?merchant=CUPCAKE_BOUTIQUE_BH&ref=${reference}&amount=${amount.toFixed(3)}&curr=${currency}`;
 
   const handleSimulatePayment = async (method: 'BENEFITPAY' | 'APPLEPAY' = selectedMethod) => {
     setIsProcessing(true);

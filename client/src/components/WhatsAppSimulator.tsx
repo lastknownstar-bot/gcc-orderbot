@@ -88,7 +88,7 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
   };
 
   const handleLocationClick = () => {
-    onSendMessage('موقعي: الرفاع الغربي مجمع 912 طريق 1402 مبنى 55', 'location');
+    onSendMessage('موقعي: مدينة عيسى، مجمع 812، طريق 1238، مبنى 5202A', 'location');
   };
 
   const handlePlayVoiceNote = () => {
@@ -149,8 +149,8 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
         <div className="flex items-center gap-3">
           <div className="relative">
             <img
-              src="https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=100&auto=format&fit=crop&q=80"
-              alt="Avatar"
+              src="https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=100&auto=format&fit=crop&q=80"
+              alt="Cupcake Boutique Avatar"
               className="w-10 h-10 rounded-full object-cover border-2 border-amber-400"
             />
             <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-400 border-2 border-slate-900 rounded-full" />
@@ -248,7 +248,7 @@ export const WhatsAppSimulator: React.FC<WhatsAppSimulatorProps> = ({
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-semibold text-amber-300">{t.voiceNoteLabel}</span>
                   <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded-full font-mono">
-                    Lulwa Concierge
+                    Dana Concierge
                   </span>
                 </div>
                 {/* Audio Waveform visualization */}

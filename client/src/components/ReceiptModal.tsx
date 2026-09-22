@@ -37,8 +37,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-amber-300">Maison de Sucre (ميزون دو سوكر)</h3>
-              <p className="text-xs text-slate-400">Riffa, Kingdom of Bahrain • {t.taxInvoice}</p>
+              <h3 className="font-bold text-base text-amber-300">Cupcake Boutique (كب كيك بوتيك)</h3>
+              <p className="text-xs text-slate-400">Shop 5202A, Road 1238, Block 812, Isa Town, Bahrain • {t.taxInvoice}</p>
             </div>
           </div>
           <button

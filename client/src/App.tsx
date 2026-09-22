@@ -27,12 +27,12 @@ export const App: React.FC = () => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [settings, setSettings] = useState<MerchantSettings>({
-    name: 'Maison de Sucre (ميزون دو سوكر)',
+    name: 'Cupcake Boutique (كب كيك بوتيك)',
     country: 'BH',
     currency: 'BHD',
-    deliveryFee: 1.000,
-    benefitPayIban: 'BH00BBGO00000001234567',
-    benefitPayMerchantId: 'MERC_BH_88992',
+    deliveryFee: 0.800,
+    benefitPayIban: 'BH64BIBB00001234567890',
+    benefitPayMerchantId: 'CB_BH_812',
     gateways: {
       benefitPay: true,
       tap: true,

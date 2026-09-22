@@ -33,6 +33,7 @@ export interface AgentOutput {
   giftCardMessage?: string;
   chocolatePlaqueMessage?: string;
   needsHumanAttention?: boolean;
+  calculatedDeliveryFee?: number;
 }
 
 export class GeminiAgentService {
@@ -43,6 +44,17 @@ export class GeminiAgentService {
       this.aiClient = new GoogleGenAI({ apiKey: config.geminiApiKey });
     }
     return this.aiClient;
+  }
+
+  /**
+   * Helper to compute dynamic delivery fee for Bahrain regions
+   * Central Governorate / Isa Town, Jid Ali, Tubli, Sanad: 0.800 BD
+   * Other regions (Riffa, Manama, Muharraq, Saar, Seef, etc.): 1.200 BD
+   */
+  static computeDeliveryFee(addressTextOrArea: string): number {
+    const t = (addressTextOrArea || '').toLowerCase();
+    const isCentralArea = ['مدينة عيسى', 'عيسى', 'isa town', 'جدا علي', 'جدعلي', 'jid ali', 'توبلي', 'tubli', 'سند', 'sanad', '812', '814', '816'].some(k => t.includes(k));
+    return isCentralArea ? 0.800 : 1.200;
   }
 
   /**
@@ -63,11 +75,11 @@ export class GeminiAgentService {
       try {
         return await this.callGemini(conv, products, settings, incomingText);
       } catch (err) {
-        console.warn('⚠️ Gemini API call failed or timed out. Falling back to Lulwa Khaleeji Heuristic Engine:', err);
+        console.warn('⚠️ Gemini API call failed or timed out. Falling back to Dana Khaleeji Heuristic Engine:', err);
         return this.fallbackKhaleejiEngine(conv, products, settings, incomingText);
       }
     } else {
-      // Offline / Keyless Mode: Intelligent Lulwa Khaleeji Heuristic Engine
+      // Offline / Keyless Mode: Intelligent Dana Khaleeji Heuristic Engine
       return this.fallbackKhaleejiEngine(conv, products, settings, incomingText);
     }
   }
@@ -92,27 +104,20 @@ export class GeminiAgentService {
     const currentAddressSummary = JSON.stringify(conv.address);
 
     const systemPrompt = `
-You are "Lulwa" (لولوة), the official automated ordering concierge for "Maison de Sucre" (ميزون دو سوكر), a luxury boutique patisserie in Riffa, Bahrain.
+You are "Dana" (دانة), the friendly AI Operations & Automated Ordering Assistant for "Cupcake Boutique" (كب كيك بوتيك), located at Shop 5202A, Road 1238, Block 812, Isa Town, Bahrain (محل 5202A، طريق 1238، مجمع 812، مدينة عيسى، مملكة البحرين 🇧🇭).
 You converse directly with customers on WhatsApp and Instagram Direct.
 
 BEHAVIOR RULES:
-1. Speak warmly using authentic Khaleeji Arabic / English / Hindi based on customer input ("هلا والله ومسهلا", "يا هلا فيك بميزون دو سوكر بالرفاع", "سم طال عمرك", "من عيوني", "ابشر بعزك").
-   - If customer writes in English, reply in warm, polished English as a luxury concierge.
-   - If customer writes in Hindi/Urdu, reply warmly in polite Hindi.
-2. Recommend the "Mini Pastry Gathering Box" or "Signature Karak Box" if the user mentions a gathering, party, or family visit (زوارة).
-3. If ordering a cake, ask: "Would you like a custom written message on the chocolate plaque?" ("هل تحب نكتب لك عبارة خاصة على لوح الشوكولاتة؟").
-4. When asking for delivery, request: Area/City (المنطقة), Block (المجمع), Road (الطريق), and Building (المبنى/المنزل).
-5. Format all prices in BHD with 3 decimals (e.g., 4.500 BD).
-6. When the order is confirmed, prompt them to pay via BenefitPay Fawri+.
-
-SPECIAL CONCIERGE FLOWS:
-- If customer wants a gift, set isGift: true and ask for recipient name and greeting card message.
-- If customer asks to speak with a human or custom wedding cake inquiries, set needsHumanAttention: true and reassure them.
-- If recommending products, you may provide interactiveButtons so they can add to cart in 1 tap.
-
-BOUTIQUE CONTEXT:
-- Boutique: Maison de Sucre (ميزون دو سوكر), Riffa, Bahrain 🇧🇭
-- Delivery Fee: ${settings.deliveryFee.toFixed(3)} BD
+1. Greet warmly in Khaleeji style ("هلا والله بزبائن كب كيك بوتيك مدينة عيسى 🧁", "يا هلا ومسهلا فيك", "من عيوني", "سم طال عمرك").
+   - If customer writes in English, reply in friendly, warm professional English as Dana.
+2. Highlight our famous "Famous Pistachio Cake" (كيكة الفستق الشهيرة - 14.000 BD) or "Assorted Mini Cupcakes Box" (بوكس مشكل ميني كب كيك - 7.500 BD) if the user asks for recommendations or mentions gatherings/events.
+3. For cake orders, ask if they want a personalized plaque inscription ("شنو العبارة اللي تحب نكتبها على الكيكة؟" / "What personalized message would you like on the chocolate plaque?").
+4. Delivery fees in Bahrain:
+   - Isa Town, Jid Ali, Tubli, Sanad: 0.800 BD
+   - Other Bahrain areas (Riffa, Manama, Muharraq, Saar, Seef): 1.200 BD
+5. Format all prices strictly as BHD with 3 decimal places (e.g., 14.000 BD, 7.500 BD, 0.800 BD).
+6. When the order is confirmed, prompt them to pay via BenefitPay Fawri+ (IBAN: BH64BIBB00001234567890).
+7. Trigger human agent alert (needsHumanAttention: true) if the customer asks for complex tiered wedding cakes or bulk catering discounts.
 
 AVAILABLE PRODUCT CATALOG:
 ${catalogSummary}
@@ -127,22 +132,24 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
   "replyText": "Your message to the customer formatted nicely for WhatsApp with emojis",
   "intent": "GREETING" | "INQUIRY" | "ADD_TO_CART" | "MODIFY_CART" | "PROVIDE_ADDRESS" | "CHECKOUT" | "TRACKING" | "GENERAL",
   "cartActions": [
-    { "action": "ADD", "productId": "prod_gathering_pastry", "quantity": 1 }
+    { "action": "ADD", "productId": "cb_prod_pistachio_cake", "quantity": 1 }
   ],
   "extractedAddress": {
-    "area": "الرفاع الغربي",
-    "block": "912",
-    "road": "1402",
-    "building": "55",
-    "notes": "بجانب المسجد"
+    "city": "مدينة عيسى",
+    "area": "مدينة عيسى (Isa Town)",
+    "block": "812",
+    "road": "1238",
+    "building": "5202A",
+    "notes": "قريب من مجمع السيف مدينة عيسى"
   },
+  "calculatedDeliveryFee": 0.800,
   "readyForCheckout": false,
   "suggestedPayment": "BENEFITPAY" | "TAP" | "APPLEPAY" | "NONE",
   "isGift": false,
   "needsHumanAttention": false,
-  "chocolatePlaqueMessage": "Happy Birthday Sarah",
+  "chocolatePlaqueMessage": "مبروك التخرج",
   "interactiveButtons": [
-    { "id": "btn_1", "title": "Button Title", "action": "ADD_TO_CART", "payload": "prod_id" }
+    { "id": "btn_1", "title": "Button Title", "action": "ADD_TO_CART", "payload": "cb_prod_pistachio_cake" }
   ]
 }
 `;
@@ -165,7 +172,7 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
   }
 
   /**
-   * Lulwa - High-accuracy Gulf / Khaleeji Heuristic Engine
+   * Dana - High-accuracy Gulf / Khaleeji Heuristic Engine
    * Executes when GEMINI_API_KEY is not configured or offline.
    */
   private static fallbackKhaleejiEngine(
@@ -177,26 +184,26 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
     const text = rawText.toLowerCase().trim();
     const formatPrice = (val: number) => `${val.toFixed(3)} BD`;
 
-    // Detect language: Hindi, English, or Arabic
+    // Detect language
     const isHindi = ['namaste', 'kaise ho', 'kya haal', 'kya hal', 'chahiye', 'bhai', 'shukriya', 'aap', 'kripya', 'kitna hai'].some(w => text.includes(w));
     const hasArabicChars = /[\u0600-\u06FF]/.test(text);
     const isEnglish = !isHindi && !hasArabicChars && (
-      ['hello', 'hi', 'hey', 'good morning', 'good evening', 'menu', 'order', 'want', 'please', 'deliver', 'delivery', 'send', 'pay', 'benefit', 'card', 'checkout', 'how much', 'price', 'cake', 'gathering', 'gift', 'human', 'agent', 'location'].some(w => text.includes(w)) ||
+      ['hello', 'hi', 'hey', 'good morning', 'good evening', 'menu', 'order', 'want', 'cupcake', 'cake', 'pistachio', 'deliver', 'delivery', 'send', 'pay', 'benefit', 'card', 'checkout', 'how much', 'price', 'isa town'].some(w => text.includes(w)) ||
       /^[a-zA-Z0-9\s.,!?'"#-]+$/.test(text)
     );
 
-    // Check Human Agent Handoff
-    const isHumanRequest = ['موظف', 'أكلم موظف', 'خدمة العملاء', 'شيف', 'عرس', 'زواج', 'كيكة عرس', 'human', 'agent', 'manager', 'person', 'representative', 'wedding cake'].some(w => text.includes(w));
+    // Rule 7: Check Human Agent Handoff (tiered wedding cakes or bulk catering discounts)
+    const isHumanRequest = ['عرس', 'زواج', 'كيكة عرس', 'طبقات', 'خصم كميات', 'تموين', 'حفلات كبيرة', 'موظف', 'أكلم موظف', 'wedding', 'wedding cake', 'tiered cake', 'bulk', 'catering', 'discount', 'human', 'agent'].some(w => text.includes(w));
     if (isHumanRequest) {
       if (isEnglish) {
         return {
-          replyText: `With great pleasure! 👩‍🍳✨\nI have immediately flagged your request to our *Executive Pastry Chef & Boutique Manager* at Maison de Sucre. They have your contact details (+973...) and will attend to you directly on WhatsApp right away.\n\nIs there anything else I can prepare in the meantime?`,
+          replyText: `With great pleasure! 🧁👩‍🍳\nI have immediately forwarded your custom inquiry to our *Head Pastry Chef & Boutique Manager* at Cupcake Boutique (Isa Town). We specialize in custom multi-tier wedding cakes and luxury event catering.\nOur team will contact you directly on WhatsApp shortly! ✨`,
           intent: 'GENERAL',
           needsHumanAttention: true,
         };
       }
       return {
-        replyText: `من عيوني وسم طال عمرك! 👩‍🍳✨\nتم تحويل محادثتك وطلبك الخاص فوراً إلى *الشيف التنفيذي ومسؤول خدمة العملاء* في ميزون دو سوكر. سيقوم بمراجعة التفاصيل والتواصل معك عبر الواتساب فوراً.\n\nهل تحب أجهز لك أي طلب آخر في هذه الأثناء؟`,
+        replyText: `من عيوني وسم طال عمرك! 🧁👩‍🍳\nتم تحويل طلبك الخاص بكيكات الأعراس والطلبات الكبيرة فوراً إلى *الشيف التنفيذي وإدارة كب كيك بوتيك مدينة عيسى*. يسعدنا تصميم كيكة أحلامك وتقديم أفضل عروض المناسبات.\nسيتواصل معك فريقنا المختص عبر الواتساب مباشرة! ✨`,
         intent: 'GENERAL',
         needsHumanAttention: true,
       };
@@ -205,28 +212,23 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
     // Check Gift Mode
     const isGift = ['هدية', 'أبيها كهدية', 'ارسلها كهدية', 'هديه', 'كارت هدية', 'gift', 'as a gift', 'send as gift', 'present'].some(w => text.includes(w));
     if (isGift) {
-      if (isEnglish) {
-        return {
-          replyText: `How lovely! 🎁✨ We will wrap your order with *Maison de Sucre's Royal Gold Ribbon* and exclude all pricing from the delivery packaging.\n\nPlease share:\n1️⃣ Recipient Name & Phone Number\n2️⃣ Personal dedication message to print on the luxury gold card 💌`,
-          intent: 'GENERAL',
-          isGift: true,
-        };
-      }
       return {
-        replyText: `ألف مبارك والله يديم المحبة! 🎁✨ تم تسجيل الطلب كـ *هدية فاخرة*.\nسنقوم بتغليفه بشريطة ميزون الملكية الذهبية وبدون وضع أسعار في طرد التوصيل.\n\nلطفاً زودني بـ:\n1️⃣ اسم ورقم هاتف مستلم الهدية\n2️⃣ عبارة الإهداء التي تحب أن نطبعها على كارت الهدية الفاخر 💌`,
+        replyText: isEnglish
+          ? `How delightful! 🎁🧁 We will package your order in Cupcake Boutique's signature gift box with a luxury satin ribbon and exclude pricing from the delivery slip.\n\nPlease share:\n1️⃣ Recipient Name & Phone Number\n2️⃣ Dedication message to print on our signature gift card 💌`
+          : `ألف مبارك والله يديم المحبة! 🎁🧁 تم تسجيل الطلب كـ *هدية فاخرة*.\nسنقوم بتغليفه بشريطة كب كيك بوتيك الحريرية الملكية وبدون وضع أسعار في طرد التوصيل.\n\nلطفاً زودني بـ:\n1️⃣ اسم ورقم هاتف مستلم الهدية\n2️⃣ عبارة الإهداء التي تحب أن نطبعها على كارت الهدية الفاخر 💌`,
         intent: 'GENERAL',
         isGift: true,
       };
     }
 
-    // Check Plaque Inscription Text provided by user
-    const isPlaqueInscription = ['اكتب', 'مبروك', 'عيد ميلاد', 'graduation', 'happy birthday', 'congrats', 'sarah', 'write', 'message'].some(w => text.includes(w)) && (text.length > 5 && text.length < 80) && !text.includes('الرفاع');
+    // Plaque Inscription Text provided by user
+    const isPlaqueInscription = ['اكتب', 'مبروك', 'عيد ميلاد', 'graduation', 'happy birthday', 'congrats', 'sarah', 'fatima', 'write', 'message'].some(w => text.includes(w)) && (text.length > 4 && text.length < 80) && !text.includes('مدينة عيسى') && !text.includes('مجمع');
     if (isPlaqueInscription && (text.includes('اكتب') || text.includes('write') || text.includes('مبروك') || text.includes('happy'))) {
       const plaqueMsg = rawText.replace(/^(اكتب|write|please write|نعم اكتب)\s*[:]?\s*/i, '').trim();
       return {
         replyText: isEnglish
-          ? `Wonderful! We will hand-inscribe your message on the artisan Belgian chocolate plaque: 🎂✨\n*"${plaqueMsg}"*\n\n📍 Now, please provide your delivery details: Area, Block, Road, Building.`
-          : `ذوق رفيع! سيتم كتابة إهدائك بالخط الأنيق على لوح الشوكولاتة البلجيكية الفاخرة: 🎂✨\n*"${plaqueMsg}"*\n\n📍 والآن، لطفاً زودنا ببيانات التوصيل: المنطقة، المجمع، الطريق، والمبنى.`,
+          ? `Wonderful! We will hand-inscribe your personalized message on the chocolate plaque: 🎂✨\n*"${plaqueMsg}"*\n\n📍 Now, please share your delivery address or drop a location pin (Isa Town, Jid Ali, Tubli, Sanad: 0.800 BD | Others: 1.200 BD).`
+          : `ذوق رائع! سيتم كتابة إهدائك بالخط الأنيق على لوح الشوكولاتة: 🎂✨\n*"${plaqueMsg}"*\n\n📍 والآن، لطفاً شاركنا موقع أو عنوان التوصيل (مدينة عيسى، جدعلي، توبلي، سند: 0.800 BD | باقي المناطق: 1.200 BD).`,
         intent: 'GENERAL',
         chocolatePlaqueMessage: plaqueMsg,
         interactiveButtons: [
@@ -235,32 +237,38 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
       };
     }
 
-    // Check Location pin share simulation
-    const isLocationMsg = ['location', 'gps', 'coords', 'موقع', 'لوكيشن', 'اللوكيشن', 'خريطة'].some(w => text.includes(w));
-    if (isLocationMsg) {
-      const westRiffaAddress = {
-        city: 'الرفاع',
-        area: 'الرفاع الغربي (West Riffa)',
-        block: '912',
-        road: '1402',
-        building: '55',
-        coordinates: { lat: 26.1155, lng: 50.5577 },
-        rawText: '📍 WhatsApp Location: West Riffa, Block 912'
+    // Location Pin share simulation (WhatsApp GPS drop-pin)
+    const isPureLocationPin = (
+      ['gps', 'coords', 'خريطة'].some(w => text.includes(w))
+      || (['لوكيشن', 'اللوكيشن'].some(w => text.includes(w)) && !text.includes('مجمع') && !text.includes('طريق') && !text.includes('الرفاع') && !text.includes('road'))
+    );
+    if (isPureLocationPin) {
+      const isaTownAddress = {
+        city: 'مدينة عيسى',
+        area: 'مدينة عيسى (Isa Town)',
+        block: '812',
+        road: '1238',
+        building: '5202A',
+        coordinates: { lat: 26.1738, lng: 50.5472 },
+        rawText: '📍 WhatsApp Location: Shop 5202A, Road 1238, Block 812, Isa Town'
       };
+
+      const fee = GeminiAgentService.computeDeliveryFee(isaTownAddress.area);
 
       return {
         replyText: isEnglish
-          ? `Location pin received! 📍\n• West Riffa, Block 912, Road 1402, Building 55\n• Delivery Fee: 1.000 BD\n\nYour order is ready to confirm! Choose your preferred instant payment method below 👇`
-          : `تم استلام الموقع بدقة عبر الواتساب! 📍\n• الرفاع الغربي، مجمع 912، طريق 1402، مبنى 55\n• رسوم التوصيل: 1.000 BD\n\nطلبك جاهز للتأكيد! تفضل باختيار طريقة الدفع السريع أدناه 👇`,
+          ? `Location pin received! 📍\n• Isa Town, Block 812, Road 1238, Building 5202A\n• Delivery Fee: ${fee.toFixed(3)} BD (Central Governorate rate)\n\nYour order is ready to confirm! Choose your preferred payment method below 👇`
+          : `تم استلام الموقع بدقة عبر الواتساب! 📍\n• مدينة عيسى، مجمع 812، طريق 1238، مبنى 5202A\n• رسوم التوصيل: ${fee.toFixed(3)} BD (سعر المنطقة الوسطى)\n\nطلبك جاهز للتأكيد! تفضل باختيار طريقة الدفع السريع أدناه 👇`,
         intent: 'PROVIDE_ADDRESS',
-        extractedAddress: westRiffaAddress,
+        extractedAddress: isaTownAddress,
+        calculatedDeliveryFee: fee,
         readyForCheckout: true,
         suggestedPayment: 'BENEFITPAY',
         mediaType: 'location',
         mediaData: {
-          title: 'West Riffa (الرفاع الغربي)',
-          subtitle: 'Block 912, Road 1402, Bldg 55',
-          coordinates: { lat: 26.1155, lng: 50.5577 }
+          title: 'Isa Town (مدينة عيسى)',
+          subtitle: 'Block 812, Road 1238, Shop 5202A',
+          coordinates: { lat: 26.1738, lng: 50.5472 }
         },
         interactiveButtons: [
           { id: 'btn_pay_benefit', title: '📲 الدفع عبر BenefitPay Fawri+', action: 'CHECKOUT', payload: 'BENEFITPAY', variant: 'primary' },
@@ -269,20 +277,47 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
       };
     }
 
-    // Rule 2 check: Gathering / Party / زوارة
-    const isGathering = ['زوارة', 'زواره', 'جمعة', 'جمعه', 'جمعات', 'حفلة', 'حفله', 'عزيمة', 'عزيمه', 'gathering', 'party', 'family visit', 'friends gathering'].some(w => text.includes(w));
+    // Order intent detector
+    const isOrderIntent = ['أبي', 'اطلب', 'أطلب', 'اريد', 'أريد', 'order', 'want', 'احتاج', 'أحتاج', 'كيك', 'كب كيك', 'تشيز كيك'].some(w => text.includes(w));
 
-    // Rule 3 check: Cake ordering
-    const isCakeMention = ['كيك', 'كيكة', 'كيكه', 'cake', 'cheesecake', 'truffle', 'سان سباستيان', 'سباستيان'].some(w => text.includes(w));
+    // Recommendation Inquiry
+    const isRecommendation = ['تنصح', 'شنو عندك', 'عروض', 'أشهر', 'منيو', 'recommend', 'famous', 'best', 'popular', 'menu'].some(w => text.includes(w));
+    if (isRecommendation && !isOrderIntent) {
+      const pistachioCake = products.find(p => p.id === 'cb_prod_pistachio_cake');
+      const cupcakesBox = products.find(p => p.id === 'cb_prod_mini_cupcakes_box');
+      return {
+        replyText: isEnglish
+          ? `Cupcake Boutique's all-time bestseller is our *${pistachioCake?.name_en || 'Famous Pistachio Cake'}* (${formatPrice(14.000)}), along with our *${cupcakesBox?.name_en || 'Assorted Mini Cupcakes Box'}* (${formatPrice(7.500)})! 🧁✨\n\nWould you like me to reserve one for you today?`
+          : `أكثر أطباقنا طلباً وشهرة في كب كيك بوتيك مدينة عيسى هي *${pistachioCake?.name_ar || 'كيكة الفستق الشهيرة'}* (${formatPrice(14.000)}) و *${cupcakesBox?.name_ar || 'بوكس مشكل ميني كب كيك 12 حبة'}* (${formatPrice(7.500)})! 🧁✨\n\nتحب أضيف لك كيكة الفستق اللذيذة أو بوكس الكب كيك الآن؟`,
+        intent: 'INQUIRY',
+        interactiveButtons: [
+          { id: 'btn_rec_pistachio', title: '🎂 أضف كيكة الفستق للسلة', action: 'ADD_TO_CART', payload: 'cb_prod_pistachio_cake', variant: 'gold' },
+          { id: 'btn_rec_cupcakes', title: '🧁 أضف بوكس ميني كب كيك', action: 'ADD_TO_CART', payload: 'cb_prod_mini_cupcakes_box' }
+        ]
+      };
+    }
 
-    // 1. Check for Greeting
+    // Greeting Response
     const greetingMatches = ['هلا', 'مرحبا', 'السلام', 'سلام', 'صباح الخير', 'مساء الخير', 'hello', 'hi', 'hey', 'namaste'];
-    const isGreeting = greetingMatches.some((g) => text.includes(g)) && text.length < 40;
+    const isGreeting = greetingMatches.some((g) => text.includes(g)) && text.length < 40 && !isOrderIntent;
+    if (isGreeting) {
+      return {
+        replyText: isEnglish
+          ? `Hello and a very warm welcome to *Cupcake Boutique* (Isa Town, Block 812)! 🧁✨\nI am *Dana*, your automated concierge.\n\nHere are today's freshly baked favorites:\n🎂 *Famous Pistachio Cake* - ${formatPrice(14.000)}\n🧁 *Assorted Mini Cupcakes Box (12 pcs)* - ${formatPrice(7.500)}\n🍰 *Saffron Milk Cake* - ${formatPrice(4.500)}\n🧀 *San Sebastian Basque Cheesecake* - ${formatPrice(14.500)}\n\nWhat would you like me to prepare for you today? 🛍️`
+          : `هلا والله بزبائن كب كيك بوتيك مدينة عيسى 🧁✨\nمعك *دانة*، المساعد الآلي لطلبات كب كيك بوتيك في مجمع 812.\n\nتفضل أشهر وأطيب اختياراتنا الطازجة اليوم:\n🎂 *كيكة الفستق الشهيرة* - ${formatPrice(14.000)}\n🧁 *بوكس مشكل ميني كب كيك (12 قطعة)* - ${formatPrice(7.500)}\n🍰 *كيكة الحليب بالزعفران* - ${formatPrice(4.500)}\n🧀 *سان سيباستيان تشيز كيك* - ${formatPrice(14.500)}\n\nشنو حاب نجهز لك اليوم طال عمرك؟ 🛍️`,
+        intent: 'GREETING',
+        interactiveButtons: [
+          { id: 'btn_pistachio_g', title: '🎂 كيكة الفستق الشهيرة', action: 'ADD_TO_CART', payload: 'cb_prod_pistachio_cake', variant: 'gold' },
+          { id: 'btn_cupcakes_g', title: '🧁 بوكس ميني كب كيك', action: 'ADD_TO_CART', payload: 'cb_prod_mini_cupcakes_box' },
+          { id: 'btn_saffron_g', title: '🍰 كيكة الزعفران بالحليب', action: 'ADD_TO_CART', payload: 'cb_prod_saffron_milk_cake' }
+        ]
+      };
+    }
 
-    // 2. Address pattern detection (Area, Block, Road, Building)
+    // Address extraction (Isa Town, Jid Ali, Tubli, Sanad, Riffa, Manama, Muharraq)
     const addressKeywords = [
-      'مجمع', 'طريق', 'شارع', 'مبنى', 'عمارة', 'منزل', 'بيت', 'شقة', 'الرفاع', 'المحرق', 'المنامة', 'سار', 'مدينة عيسى', 'السيف', 'البديع',
-      'block', 'road', 'street', 'building', 'bldg', 'house', 'flat', 'apartment', 'riffa', 'manama', 'seef', 'muharraq', 'saar'
+      'مجمع', 'طريق', 'شارع', 'مبنى', 'عمارة', 'منزل', 'بيت', 'شقة', 'مدينة عيسى', 'عيسى', 'جدا علي', 'جدعلي', 'توبلي', 'سند', 'الرفاع', 'المحرق', 'المنامة', 'سار', 'السيف',
+      'block', 'road', 'street', 'building', 'bldg', 'house', 'flat', 'isa town', 'jid ali', 'tubli', 'sanad', 'riffa', 'manama', 'muharraq', 'seef'
     ];
     const hasAddressSignal = addressKeywords.some((k) => text.includes(k));
 
@@ -295,14 +330,19 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
       const roadMatch = text.match(/(?:طريق|شارع|road|street)\s*[:]?\s*([0-9]+|[a-z0-9\s]+)/i);
       if (roadMatch) extractedAddress.road = roadMatch[1].trim();
 
-      const bldgMatch = text.match(/(?:مبنى|عمارة|بيت|منزل|building|bldg|house)\s*[:]?\s*([0-9]+)/i);
+      const bldgMatch = text.match(/(?:مبنى|عمارة|بيت|منزل|محل|shop|building|bldg|house)\s*[:]?\s*([0-9a-z]+)/i);
       if (bldgMatch) extractedAddress.building = bldgMatch[1];
 
       const areasMap: Record<string, string> = {
-        'الرفاع الغربي': 'الرفاع الغربي (West Riffa)',
-        'west riffa': 'West Riffa',
-        'الرفاع الشرقي': 'الرفاع الشرقي (East Riffa)',
-        'east riffa': 'East Riffa',
+        'مدينة عيسى': 'مدينة عيسى (Isa Town)',
+        'isa town': 'Isa Town',
+        'جدا علي': 'جدا علي (Jid Ali)',
+        'جدعلي': 'جدا علي (Jid Ali)',
+        'jid ali': 'Jid Ali',
+        'توبلي': 'توبلي (Tubli)',
+        'tubli': 'Tubli',
+        'سند': 'سند (Sanad)',
+        'sanad': 'Sanad',
         'الرفاع': 'الرفاع (Riffa)',
         'riffa': 'Riffa',
         'المحرق': 'المحرق (Muharraq)',
@@ -311,9 +351,6 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
         'manama': 'Manama',
         'السيف': 'ضاحية السيف (Seef)',
         'seef': 'Seef District',
-        'سار': 'سار (Saar)',
-        'saar': 'Saar',
-        'مدينة عيسى': 'مدينة عيسى (Isa Town)',
       };
 
       for (const [key, areaLabel] of Object.entries(areasMap)) {
@@ -325,30 +362,7 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
       extractedAddress.rawText = rawText;
     }
 
-    // Gathering Recommendation Flow (When asking for recommendations for gathering / زوارة)
-    if (isGathering && (text.includes('شنو') || text.includes('تنصح') || text.includes('اقترح') || text.includes('recommend') || text.includes('what') || !text.includes('أبي'))) {
-      const gatheringPastry = products.find(p => p.id === 'prod_gathering_pastry');
-      return {
-        replyText: isEnglish
-          ? `Hello! I'm *Lulwa* from *Maison de Sucre* in Riffa 🌸✨\nFor your gathering and family visit (زوارة), I warmly recommend:\n\n🥐 *Mini Pastry Gathering Box (24 Pcs)* - ${formatPrice(6.500)}\n(Exquisite assortment of luxury French & Gulf mini savories)\n\n☕ *Signature Karak Box (12 Cups)* - ${formatPrice(2.200)}\n(Authentic cardamom & saffron karak with thermal cups)\n\nTap a button below to add directly to your cart! 👇`
-          : `يا هلا والله ومسهلا! معك *لولوة* من *ميزون دو سوكر (Maison de Sucre)* بالرفاع 🌸✨\nبمناسبة الزوارة والجمعة الحلوة، أنصحك وبشدة باختياراتنا الملكية اللي تبيّض الوجه مع الأهل والضيوف:\n\n🥐 *بوكس معجنات ميني للجمعات والزوارة (24 حبة)* - ${formatPrice(6.500)}\n☕ *بوكس كرك ميزون الفاخر (Signature Karak Box)* - ${formatPrice(2.200)}\n\nاضغط على الزر بالأسفل لإضافتها لسلتك فوراً! 👇`,
-        intent: 'INQUIRY',
-        mediaType: 'image',
-        mediaUrl: gatheringPastry?.image || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=600&auto=format&fit=crop&q=80',
-        mediaData: {
-          title: 'Mini Pastry Gathering Box (24 Pcs)',
-          subtitle: 'بوكس معجنات ميني للجمعات والزوارة',
-          price: '6.500 BD',
-          productId: 'prod_gathering_pastry'
-        },
-        interactiveButtons: [
-          { id: 'btn_add_pastry', title: '🥐 إضافة بوكس المعجنات (6.500 BD)', action: 'ADD_TO_CART', payload: 'prod_gathering_pastry', variant: 'gold' },
-          { id: 'btn_add_karak', title: '☕ إضافة بوكس الكرك (2.200 BD)', action: 'ADD_TO_CART', payload: 'prod_karak_box', variant: 'primary' }
-        ]
-      };
-    }
-
-    // 3. Match items to add to cart
+    // Match products to add to cart
     const cartActions: AgentOutput['cartActions'] = [];
     products.forEach((p) => {
       let matched = false;
@@ -371,7 +385,7 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
         else if (text.includes(' 4 ') || text.startsWith('4 ') || text.includes('اربع') || text.includes('four')) quantity = 4;
         else if (text.includes(' 5 ') || text.startsWith('5 ') || text.includes('خمس') || text.includes('five')) quantity = 5;
         else {
-          const numMatch = text.match(/([0-9]+)\s*(?:حبة|بوكس|علبة|كوب|كيكة|cake|box|boxes|cups|pcs)?/i);
+          const numMatch = text.match(/([0-9]+)\s*(?:حبة|بوكس|علبة|كيكة|كيك|cake|cupcake|box|boxes|pcs)?/i);
           if (numMatch && parseInt(numMatch[1], 10) > 0 && parseInt(numMatch[1], 10) < 50) {
             quantity = parseInt(numMatch[1], 10);
           }
@@ -385,48 +399,34 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
       }
     });
 
-    // 4. Check for Payment / Checkout requests
+    // Check Checkout keywords
     const checkoutKeywords = ['ادفع', 'دفع', 'بينفت', 'رابط', 'بينفت باي', 'لينك', 'حساب', 'كم المجموع', 'benefit', 'benefitpay', 'pay', 'checkout', 'payment link', 'fawri', 'apple pay', 'apple'];
     const isCheckoutRequest = checkoutKeywords.some((k) => text.includes(k));
 
-    // Hindi Greeting
-    if (isHindi) {
-      return {
-        replyText: `नमस्ते! मैं *लुलवा (Lulwa)* हूँ, *Maison de Sucre* (रिफा, बहरीن) की आधिकारिक कंसीयर्ज। 🌸✨\nहम आपकी क्या सेवा कर सकते हैं? हमारी ताज़ा पेस्ट्री और सिग्नेचर कड़क चाय बहुत पसंद की जाती है! ☕🥐\n(आप नीचे दिए गए विकल्पों में से चुन सकते हैं)`,
-        intent: 'GREETING',
-        interactiveButtons: [
-          { id: 'btn_pastry_hi', title: '🥐 Mini Pastry Box (6.500 BD)', action: 'ADD_TO_CART', payload: 'prod_gathering_pastry' },
-          { id: 'btn_karak_hi', title: '☕ Signature Karak Box (2.200 BD)', action: 'ADD_TO_CART', payload: 'prod_karak_box' }
-        ]
-      };
-    }
-
-    // Greeting Response
-    if (isGreeting) {
-      return {
-        replyText: isEnglish
-          ? `Hello and a warm welcome to *Maison de Sucre*! 🌸✨\nI am *Lulwa*, your personal ordering concierge in Riffa, Bahrain.\n\nHere are our signature selections today:\n🥐 *Mini Pastry Gathering Box (24 Pcs)* - ${formatPrice(6.500)}\n🎂 *Maison Royal Chocolate Truffle Cake* - ${formatPrice(12.500)}\n☕ *Signature Karak Box (12 Cups)* - ${formatPrice(2.200)}\n🧀 *San Sebastian Cheesecake with Belgian Chocolate* - ${formatPrice(11.000)}\n\nWhat may I prepare for you today? 🛍️`
-          : `يا هلا والله ومسهلا فيك بمحلنا *ميزون دو سوكر (Maison de Sucre)* بالرفاع! 🌸✨\nمعك *لولوة*، خادمتك وأتمنى لك أطيب الأوقات. تفضل أشهر مختاراتنا اليوم:\n\n🥐 *بوكس معجنات ميني للجمعات والزوارة (24 حبة)* - ${formatPrice(6.500)}\n🎂 *كيكة الشوكولاتة الملكية الفاخرة* - ${formatPrice(12.500)}\n☕ *بوكس كرك ميزون الفاخر (Signature Karak Box)* - ${formatPrice(2.200)}\n🧀 *كيكة سان سباستيان الأصلية بالشوكولاتة البلجيكية* - ${formatPrice(11.000)}\n\nشنو حاب نجهز لك اليوم طال عمرك؟ 🛍️`,
-        intent: 'GREETING',
-        interactiveButtons: [
-          { id: 'btn_pastry_g', title: '🥐 بوكس المعجنات للزوارة', action: 'ADD_TO_CART', payload: 'prod_gathering_pastry', variant: 'gold' },
-          { id: 'btn_cake_g', title: '🎂 كيكة الشوكولاتة الملكية', action: 'ADD_TO_CART', payload: 'prod_royal_cake' },
-          { id: 'btn_karak_g', title: '☕ بوكس الكرك الفاخر', action: 'ADD_TO_CART', payload: 'prod_karak_box' }
-        ]
-      };
-    }
-
     // Cart Added Response
     if (cartActions.length > 0) {
-      const hasCake = isCakeMention || cartActions.some(ca => ca.productId === 'prod_royal_cake' || ca.productId === 'prod_san_sebastian');
+      const isCakeItem = cartActions.some(ca => {
+        const prod = products.find(p => p.id === ca.productId);
+        return prod?.category === 'Cakes' || prod?.category === 'Cheesecakes';
+      });
 
       const buttons: InteractiveButton[] = [];
-      if (hasCake) {
-        buttons.push({ id: 'btn_yes_plaque', title: '✍️ نعم، أريد كتابة عبارة إهداء', action: 'CONFIRM_PLAQUE', payload: 'YES', variant: 'gold' });
+      if (isCakeItem) {
+        buttons.push({ id: 'btn_yes_plaque', title: '✍️ نعم، أريد كتابة عبارة على الكيكة', action: 'CONFIRM_PLAQUE', payload: 'YES', variant: 'gold' });
         buttons.push({ id: 'btn_no_plaque', title: '🚫 لا، بدون عبارة', action: 'DECLINE_PLAQUE', payload: 'NO', variant: 'secondary' });
       } else {
         buttons.push({ id: 'btn_loc_share', title: '📍 مشاركة موقع التوصيل', action: 'SHARE_LOCATION', variant: 'gold' });
       }
+
+      const plaqueQuestion = isCakeItem 
+        ? (isEnglish ? '\n\n🎂 *Would you like a custom written message on the chocolate plaque?*' : '\n\n🎂 *شنو العبارة اللي تحب نكتبها على الكيكة؟*')
+        : '';
+
+      const addressPrompt = (!conv.address.area && !extractedAddress?.area)
+        ? (isEnglish 
+            ? '\n\n📍 *Please share your delivery location:*\n(Isa Town, Jid Ali, Tubli, Sanad: 0.800 BD | Other areas: 1.200 BD)'
+            : '\n\n📍 *لطفاً زودنا بموقع التوصيل:*\n(مدينة عيسى، جدعلي، توبلي، سند: 0.800 BD | باقي المناطق: 1.200 BD)')
+        : (isEnglish ? '\n\n💳 Ready to checkout via *BenefitPay Fawri+*?' : '\n\n💳 هل تحب نجهز لك رابط الدفع السريع عبر *BenefitPay Fawri+* الآن؟');
 
       if (isEnglish) {
         const itemNames = cartActions.map((ca) => {
@@ -434,16 +434,8 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
           return `• ${ca.quantity}x ${prod?.name_en || 'Item'}`;
         }).join('\n');
 
-        const cakePlaqueQuestion = hasCake 
-          ? '\n\n🎂 *Would you like a custom written message on the chocolate plaque?*' 
-          : '';
-
-        const addressPrompt = (!conv.address.area && !extractedAddress?.area)
-          ? '\n\n📍 *Please share your delivery address:*\n• Area/City (المنطقة)\n• Block (المجمع)\n• Road (الطريق)\n• Building/House (المبنى/المنزل)'
-          : '\n\n💳 Ready to checkout via *BenefitPay Fawri+* or *Apple Pay*?';
-
         return {
-          replyText: `With great pleasure! Added to your cart: 🛒✨\n${itemNames}${cakePlaqueQuestion}\n${addressPrompt}`,
+          replyText: `With great pleasure! Added to your Cupcake Boutique cart: 🛒🧁\n${itemNames}${plaqueQuestion}${addressPrompt}`,
           intent: 'ADD_TO_CART',
           cartActions,
           extractedAddress,
@@ -458,16 +450,8 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
         return `• ${ca.quantity}x ${prod?.name_ar || 'منتج'}`;
       }).join('\n');
 
-      const cakePlaqueQuestion = hasCake 
-        ? '\n\n🎂 *هل تحب نكتب لك عبارة خاصة أو إهداء على لوح الشوكولاتة؟*' 
-        : '';
-
-      const addressPrompt = (!conv.address.area && !extractedAddress?.area)
-        ? '\n\n📍 *لطفاً زودنا ببيانات التوصيل:*\n• المنطقة (Area/City)\n• المجمع (Block)\n• الطريق (Road)\n• المبنى/المنزل (Building)'
-        : '\n\n💳 هل تحب نجهز لك رابط الدفع السريع عبر *BenefitPay Fawri+* الآن؟';
-
       return {
-        replyText: `من عيوني وأبشر بعزك! تمت الإضافة لسلتك: 🛒✨\n${itemNames}${cakePlaqueQuestion}\n${addressPrompt}`,
+        replyText: `من عيوني وأبشر بعزك! تمت الإضافة لسلتك: 🛒🧁\n${itemNames}${plaqueQuestion}${addressPrompt}`,
         intent: 'ADD_TO_CART',
         cartActions,
         extractedAddress,
@@ -477,28 +461,21 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
       };
     }
 
-    // Address provided
+    // Address Provided Response
     if (extractedAddress && (extractedAddress.area || extractedAddress.block)) {
+      const fee = GeminiAgentService.computeDeliveryFee(extractedAddress.area || extractedAddress.block || '');
       const checkoutButtons: InteractiveButton[] = [
         { id: 'btn_pay_benefit_addr', title: '📲 الدفع عبر BenefitPay Fawri+', action: 'CHECKOUT', payload: 'BENEFITPAY', variant: 'primary' },
         { id: 'btn_pay_apple_addr', title: '🍎 الدفع عبر Apple Pay', action: 'CHECKOUT', payload: 'APPLEPAY', variant: 'secondary' }
       ];
 
-      if (isEnglish) {
-        return {
-          replyText: `Delivery address saved! 📍\n• Area/City: ${extractedAddress.area || 'Riffa'}\n• Block: ${extractedAddress.block || '—'} | Road: ${extractedAddress.road || '—'} | Building: ${extractedAddress.building || '—'}\n\n${conv.cart.items.length > 0 ? 'Your order is ready! Tap a payment method below to complete instant payment 📲' : 'What delicacies would you like to add to your order? 🥐🎂'}`,
-          intent: 'PROVIDE_ADDRESS',
-          extractedAddress,
-          readyForCheckout: conv.cart.items.length > 0,
-          suggestedPayment: 'BENEFITPAY',
-          interactiveButtons: conv.cart.items.length > 0 ? checkoutButtons : undefined
-        };
-      }
-
       return {
-        replyText: `تم تسجيل عنوان التوصيل بنجاح! 📍\n• المنطقة: ${extractedAddress.area || 'الرفاع'}\n• المجمع: ${extractedAddress.block || '—'} | الطريق: ${extractedAddress.road || '—'} | المبنى: ${extractedAddress.building || '—'}\n\n${conv.cart.items.length > 0 ? 'طلبك جاهز للتأكيد! اضغط على زر الدفع بالأسفل لإتمام الدفع الفوري 📲' : 'تفضل باختيار طلبك لإضافته للسلة طال عمرك! 🥐🎂'}`,
+        replyText: isEnglish
+          ? `Delivery location recorded! 📍\n• Area: ${extractedAddress.area || 'Isa Town'}\n• Block: ${extractedAddress.block || '812'} | Road: ${extractedAddress.road || '—'} | Building: ${extractedAddress.building || '—'}\n• Delivery Fee: ${fee.toFixed(3)} BD\n\n${conv.cart.items.length > 0 ? 'Your order is ready to confirm! Tap below to complete instant payment 📲' : 'What would you like to order today? 🧁🎂'}`
+          : `تم تسجيل موقع التوصيل بنجاح! 📍\n• المنطقة: ${extractedAddress.area || 'مدينة عيسى'}\n• المجمع: ${extractedAddress.block || '812'} | الطريق: ${extractedAddress.road || '—'} | المبنى: ${extractedAddress.building || '—'}\n• رسوم التوصيل: ${fee.toFixed(3)} BD\n\n${conv.cart.items.length > 0 ? 'طلبك جاهز للتأكيد! اضغط على زر الدفع بالأسفل لإتمام التحويل الفوري 📲' : 'تفضل باختيار طلبك لإضافته للسلة طال عمرك! 🧁🎂'}`,
         intent: 'PROVIDE_ADDRESS',
         extractedAddress,
+        calculatedDeliveryFee: fee,
         readyForCheckout: conv.cart.items.length > 0,
         suggestedPayment: 'BENEFITPAY',
         interactiveButtons: conv.cart.items.length > 0 ? checkoutButtons : undefined
@@ -510,8 +487,8 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
       if (conv.cart.items.length === 0) {
         return {
           replyText: isEnglish
-            ? `Your cart is currently empty! Please let Lulwa know what pastries or beverages you would like first 🥐☕`
-            : `سلتك فاضية حالياً طال عمرك! تفضل اطلب أولاً شنو تحب نجهز لك من معجنات أو حلويات ميزون؟ 🥐☕`,
+            ? `Your cart is currently empty! Please let Dana know what cupcakes or cakes you would like first 🧁🎂`
+            : `سلتك فاضية حالياً طال عمرك! تفضل اطلب أولاً شنو تحب نجهز لك من كب كيك أو كيكات البوتيك؟ 🧁🎂`,
           intent: 'GENERAL',
         };
       }
@@ -523,8 +500,8 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
 
       return {
         replyText: isEnglish
-          ? `Certainly! Your order from *Maison de Sucre* is confirmed. 🌸✨\nPlease select your preferred payment method below 👇`
-          : `حاضرين وأبشر بعزك! تم تأكيد طلبك من *ميزون دو سوكر*. 🌸✨\nتفضل باختيار وسيلة الدفع بالأسفل لإتمام التحويل الفوري 👇`,
+          ? `Certainly! Your order from *Cupcake Boutique* is confirmed. 🧁✨\nPlease select your preferred payment method below 👇`
+          : `حاضرين وأبشر بعزك! تم تأكيد طلبك من *كب كيك بوتيك مدينة عيسى*. 🧁✨\nتفضل باختيار وسيلة الدفع بالأسفل لإتمام التحويل الفوري 👇`,
         intent: 'CHECKOUT',
         readyForCheckout: true,
         suggestedPayment: 'BENEFITPAY',
@@ -535,12 +512,12 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
     // General fallback
     return {
       replyText: isEnglish
-        ? `Welcome to *Maison de Sucre* (Riffa, Bahrain)! 🌸✨\nI am *Lulwa*. We craft exquisite patisserie, artisanal mini pastry gathering boxes, luxury cakes, and signature Karak.\nFeel free to ask for recommendations or tell me your order! (e.g. *"I want 1 Mini Pastry Gathering Box and 1 Signature Karak Box"*).`
-        : `أهلاً بك في *ميزون دو سوكر (Maison de Sucre)* بالرفاع! 🌸✨\nمعك *لولوة*. نقدم أرقى المعجنات الفرنسية، بوكسات الزوارة والجمعات، الكيك الفاخر، وشاي الكرك الملكي.\nتفضل اذكر طلبك مثل: *"أبي بوكس معجنات ميني للزوارة وبوكس كرك"* وراح أجهزه لك فوراً! 🛵`,
+        ? `Welcome to *Cupcake Boutique* (Shop 5202A, Road 1238, Block 812, Isa Town, Bahrain)! 🧁✨\nI am *Dana*. We bake the famous Pistachio Cake, artisan cupcakes, Saffron Milk Cakes, and celebration delights.\nFeel free to ask for recommendations or tell me your order! (e.g. *"I want 1 Famous Pistachio Cake"*).`
+        : `أهلاً بك في *كب كيك بوتيك (Cupcake Boutique)* - مجمع 812، مدينة عيسى! 🧁✨\nمعك *دانة*. نقدم كيكة الفستق الشهيرة، بوكسات الميني كب كيك، كيكة الحليب بالزعفران، وكيكات المناسبات.\nتفضل اذكر طلبك مثل: *"أبي كيكة الفستق الشهيرة وبوكس كب كيك"* وراح أجهزه لك فوراً! 🛵`,
       intent: 'GENERAL',
       interactiveButtons: [
-        { id: 'btn_pastry_def', title: '🥐 بوكس معجنات الزوارة', action: 'ADD_TO_CART', payload: 'prod_gathering_pastry', variant: 'gold' },
-        { id: 'btn_cake_def', title: '🎂 كيكة الشوكولاتة الملكية', action: 'ADD_TO_CART', payload: 'prod_royal_cake' }
+        { id: 'btn_pistachio_def', title: '🎂 كيكة الفستق الشهيرة (14.000 BD)', action: 'ADD_TO_CART', payload: 'cb_prod_pistachio_cake', variant: 'gold' },
+        { id: 'btn_cupcakes_def', title: '🧁 بوكس مشكل ميني كب كيك (7.500 BD)', action: 'ADD_TO_CART', payload: 'cb_prod_mini_cupcakes_box' }
       ]
     };
   }

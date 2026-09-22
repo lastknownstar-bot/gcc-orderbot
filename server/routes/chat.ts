@@ -94,7 +94,12 @@ chatRouter.post('/simulate', async (req, res) => {
         }
       }
 
-      store.updateConversationCart(phone, currentItems);
+      store.updateConversationCart(phone, currentItems, agentOutput.calculatedDeliveryFee);
+    } else if (agentOutput.calculatedDeliveryFee !== undefined) {
+      const conv = store.getOrCreateConversation(phone);
+      if (conv.cart.items.length > 0) {
+        store.updateConversationCart(phone, conv.cart.items, agentOutput.calculatedDeliveryFee);
+      }
     }
 
     // 4. Update address if extracted

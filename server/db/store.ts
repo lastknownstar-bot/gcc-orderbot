@@ -40,39 +40,40 @@ class InMemoryStore {
       customerName: 'فاطمة الكعبي (Fatima Al-Kaabi)',
       items: [
         {
-          productId: 'prod_karak_box',
-          productNameAr: 'بوكس كرك ميزون الفاخر (Signature Karak Box)',
-          productNameEn: 'Signature Karak Box (12 Cups)',
-          quantity: 2,
-          unitPrice: 2.200,
-          totalPrice: 4.400,
+          productId: 'cb_prod_pistachio_cake',
+          productNameAr: 'كيكة الفستق الشهيرة (Famous Pistachio Cake)',
+          productNameEn: 'Famous Pistachio Cake (8-10 Pax)',
+          quantity: 1,
+          unitPrice: 14.000,
+          totalPrice: 14.000,
         },
         {
-          productId: 'prod_kunafa_bites',
-          productNameAr: 'بوكس ميني كنافة جبن وقشطة ميزون (16 حبة)',
-          productNameEn: 'Mini Kunafa Bites Box (16 Pcs)',
+          productId: 'cb_prod_mini_cupcakes_box',
+          productNameAr: 'بوكس مشكل ميني كب كيك (12 قطعة)',
+          productNameEn: 'Assorted Mini Cupcakes Box (12 pcs)',
           quantity: 1,
-          unitPrice: 4.500,
-          totalPrice: 4.500,
+          unitPrice: 7.500,
+          totalPrice: 7.500,
         }
       ],
-      subtotal: 8.900,
-      deliveryFee: 1.000,
-      total: 9.900,
+      subtotal: 21.500,
+      deliveryFee: 0.800,
+      total: 22.300,
       currency: 'BHD',
       status: 'PAID',
       deliveryAddress: {
         country: 'البحرين',
-        city: 'الرفاع',
-        area: 'الرفاع الغربي',
-        block: '912',
-        road: '1402',
-        building: '55',
-        notes: 'بجانب مدرسة الرفاع، يرن الجرس',
-        rawText: 'الرفاع الغربي، مجمع 912، طريق 1402، مبنى 55'
+        city: 'مدينة عيسى',
+        area: 'مدينة عيسى (Isa Town)',
+        block: '812',
+        road: '1238',
+        building: '5202A',
+        notes: 'بجانب مجمع السيف مدينة عيسى',
+        rawText: 'مدينة عيسى، مجمع 812، طريق 1238، مبنى 5202A'
       },
       paymentMethod: 'BENEFITPAY',
-      paymentReference: 'BENEFIT-REF-9841',
+      paymentReference: 'BP-REF-CB812',
+      chocolatePlaqueMessage: 'مبروك التخرج يا فاطمة 🎓',
       paidAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
       createdAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
       updatedAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
@@ -186,10 +187,12 @@ class InMemoryStore {
     return conv;
   }
 
-  updateConversationCart(phone: string, items: CartItem[]): Conversation | undefined {
+  updateConversationCart(phone: string, items: CartItem[], customDeliveryFee?: number): Conversation | undefined {
     const conv = this.getOrCreateConversation(phone);
     const subtotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
-    const fee = items.length > 0 ? this.merchantSettings.deliveryFee : 0;
+    const fee = items.length > 0 
+      ? (customDeliveryFee !== undefined ? customDeliveryFee : (conv.cart.deliveryFee || this.merchantSettings.deliveryFee))
+      : 0;
     const total = subtotal + fee;
 
     conv.cart = {
