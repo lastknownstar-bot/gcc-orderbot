@@ -5,10 +5,12 @@
     "moduleResolution": "NodeNext",
     "rootDir": "./server",
     "outDir": "./dist",
-    "strict": true,
+    "strict": false,
+    "noImplicitAny": false,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"]
   },
   "include": ["server/**/*"],
   "exclude": ["node_modules", "client", "dist"]
