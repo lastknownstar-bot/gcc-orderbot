@@ -42,9 +42,11 @@ chatRouter.post('/simulate', async (req, res) => {
     } else if (buttonAction === 'CONFIRM_PLAQUE') {
       processedText = buttonPayload === 'YES' ? 'نعم، أريد كتابة عبارة إهداء على لوح الشوكولاتة' : 'لا بدون عبارة';
     } else if (buttonAction === 'SHARE_LOCATION') {
-      processedText = 'موقعي: الرفاع الغربي مجمع 912 طريق 1402 مبنى 55';
+      processedText = 'موقعي: مدينة عيسى، مجمع 812، طريق 1238، مبنى 5202A';
     } else if (buttonAction === 'CHECKOUT') {
       processedText = buttonPayload === 'APPLEPAY' ? 'أبي أدفع عن طريق Apple Pay' : 'أبي أدفع بينفت باي فوري+';
+    } else if (buttonAction === 'REQUEST_HUMAN') {
+      processedText = 'أبي أكلم موظف أو الشيف بخصوص كيكة عرس خاصة أو مناسبة كبيرة';
     }
 
     const agentOutput = await GeminiAgentService.processMessage(phone, name, processedText);

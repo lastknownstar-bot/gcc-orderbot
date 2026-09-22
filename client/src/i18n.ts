@@ -35,6 +35,9 @@ export const translations = {
     
     // Quick prompts
     prompts: [
+      { label: '🚚 التوصيل والاستلام', text: 'عندكم توصيل لجميع مناطق البحرين؟ وأقدر استلم من المحل؟' },
+      { label: '⏰ أوقات العمل', text: 'شنو أوقات العمل والدوام عندكم؟' },
+      { label: '📍 موقع المحل', text: 'وين موقع المحل بالضبط؟' },
       { label: '🎂 كيكة الفستق', text: 'هلا دانة، أبي أطلب كيكة الفستق الشهيرة حق اليوم' },
       { label: '🧁 بوكس كب كيك', text: 'أبي بوكس مشكل ميني كب كيك 12 حبة' },
       { label: '🧀 سان سيباستيان', text: 'عندكم سان سيباستيان تشيز كيك؟' },
@@ -204,6 +207,9 @@ export const translations = {
     
     // Quick prompts
     prompts: [
+      { label: '🚚 Home Delivery FAQ', text: 'Do you guys do home delivery? Can I pick up my order?' },
+      { label: '⏰ Operating Hours FAQ', text: 'What are your operating hours?' },
+      { label: '📍 Store Location FAQ', text: 'Where is your store located?' },
       { label: '🎂 Pistachio Cake', text: 'Hi Dana, I want to order the Famous Pistachio Cake' },
       { label: '🧁 Mini Cupcakes Box', text: 'I want an Assorted Mini Cupcakes Box (12 pcs)' },
       { label: '🧀 San Sebastian', text: 'Do you have the San Sebastian Cheesecake?' },

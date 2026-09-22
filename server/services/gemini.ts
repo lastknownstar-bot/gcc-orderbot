@@ -5,7 +5,7 @@ import { CartItem, DeliveryAddress, Product, InteractiveButton } from '../db/typ
 
 export interface AgentOutput {
   replyText: string;
-  intent: 'GREETING' | 'INQUIRY' | 'ADD_TO_CART' | 'MODIFY_CART' | 'PROVIDE_ADDRESS' | 'CHECKOUT' | 'TRACKING' | 'GENERAL';
+  intent: 'GREETING' | 'INQUIRY' | 'ADD_TO_CART' | 'MODIFY_CART' | 'PROVIDE_ADDRESS' | 'CHECKOUT' | 'TRACKING' | 'GENERAL' | 'FAQ_DELIVERY' | 'FAQ_HOURS' | 'FAQ_LOCATION' | 'FAQ_CONTACT';
   cartActions?: Array<{
     action: 'ADD' | 'REMOVE' | 'SET';
     productId: string;
@@ -119,6 +119,27 @@ BEHAVIOR RULES:
 6. When the order is confirmed, prompt them to pay via BenefitPay Fawri+ (IBAN: BH64BIBB00001234567890).
 7. Trigger human agent alert (needsHumanAttention: true) if the customer asks for complex tiered wedding cakes or bulk catering discounts.
 
+OFFICIAL SHOP KNOWLEDGE BASE & FAQS:
+1. Operating Hours:
+   - Daily (Monday – Sunday): 8:30 AM to 9:00 PM.
+   - When asked about operating hours or open/close times, answer directly and concisely, and set intent to "FAQ_HOURS".
+2. Delivery & Fulfillment Options:
+   - Yes, we provide home delivery across Bahrain!
+   - Local Isa Town / Central Governorate (Block 812, Jid Ali, Tubli, Sanad): 0.800 BHD delivery fee.
+   - All other regions in Bahrain (Riffa, Manama, Muharraq, Saar, Seef): 1.200 BHD delivery fee.
+   - In-store pickup is also available at Shop 5202A, Road 1238, Block 812, Isa Town.
+   - When asked about home delivery availability, delivery fees, or in-store pickup, answer directly with these rates/options and set intent to "FAQ_DELIVERY".
+3. Store Location:
+   - Shop 5202A, Road 1238, Block 812, Isa Town, Bahrain (near Seef Mall Isa Town).
+   - When asked about shop location or address, answer directly with the address and set intent to "FAQ_LOCATION".
+4. Contact Details:
+   - Phone / WhatsApp: +973 1710 0130
+   - Instagram: @cupcake.boutique
+   - When asked for contact details or phone number, answer directly and set intent to "FAQ_CONTACT".
+
+CRITICAL FAQ RULE:
+When customers ask non-ordering questions (operating hours, delivery options, location, contact), NEVER echo a generic welcome greeting. You MUST answer the specific question directly using the knowledge base above first, and then politely offer to show the menu or take an order.
+
 AVAILABLE PRODUCT CATALOG:
 ${catalogSummary}
 
@@ -130,7 +151,7 @@ RESPONSE FORMAT RULES:
 You MUST respond with a pure JSON object without markdown fences, matching this schema:
 {
   "replyText": "Your message to the customer formatted nicely for WhatsApp with emojis",
-  "intent": "GREETING" | "INQUIRY" | "ADD_TO_CART" | "MODIFY_CART" | "PROVIDE_ADDRESS" | "CHECKOUT" | "TRACKING" | "GENERAL",
+  "intent": "GREETING" | "INQUIRY" | "ADD_TO_CART" | "MODIFY_CART" | "PROVIDE_ADDRESS" | "CHECKOUT" | "TRACKING" | "GENERAL" | "FAQ_DELIVERY" | "FAQ_HOURS" | "FAQ_LOCATION" | "FAQ_CONTACT",
   "cartActions": [
     { "action": "ADD", "productId": "cb_prod_pistachio_cake", "quantity": 1 }
   ],
@@ -277,12 +298,103 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
       };
     }
 
-    // Order intent detector
-    const isOrderIntent = ['أبي', 'اطلب', 'أطلب', 'اريد', 'أريد', 'order', 'want', 'احتاج', 'أحتاج', 'كيك', 'كب كيك', 'تشيز كيك'].some(w => text.includes(w));
+    // Check if customer mentions a specific product in our catalog
+    const mentionsSpecificProduct = products.some(p => 
+      p.keywords.some(kw => text.includes(kw.toLowerCase())) || 
+      text.includes(p.name_en.toLowerCase())
+    );
+
+    // Direct purchase intent (explicitly wanting to order a specific product)
+    const isDirectPurchase = mentionsSpecificProduct && ['أبي', 'اطلب', 'أطلب', 'اريد', 'أريد', 'want', 'buy', 'send me', 'احتاج'].some(w => text.includes(w));
+
+    // General order intent detector (excludes pickup inquiries)
+    const isOrderIntent = ['أبي', 'اطلب', 'أطلب', 'اريد', 'أريد', 'want', 'احتاج', 'أحتاج'].some(w => text.includes(w)) || (['order', 'طلب'].some(w => text.includes(w)) && !text.includes('pick up') && !text.includes('pickup') && !text.includes('can i') && !text.includes('home delivery'));
+
+    // FAQ 1: Operating Hours
+    const isHoursQuestion = [
+      'operating hours', 'opening hours', 'hours', 'what time', 'timings', 'timing', 'opening time', 'closing time', 'when do you open', 'when do you close',
+      'أوقات', 'اوقات', 'ساعات العمل', 'أوقات العمل', 'دوام', 'الدوام', 'تفتحون', 'تسكرون', 'متى تفتحون', 'متى تسكرون', 'ساعة كم', 'مفتوحين', 'مفتوح', 'شغالين', 'وقت العمل'
+    ].some(w => text.includes(w));
+
+    // FAQ 2: Store Location
+    const isLocationQuestion = [
+      'where is your store', 'where are you located', 'where is your shop', 'store location', 'shop location', 'your address', 'where located', 'where is cupcake boutique',
+      'وين مكانكم', 'وين المحل', 'موقع المحل', 'وين موقعكم', 'عنوانكم', 'وين موجودين', 'وين الفرع', 'مكان المحل', 'وين صايرين', 'وين صاير', 'موقعكم وين', 'عنوان المحل'
+    ].some(w => text.includes(w)) || (text.includes('where') && (text.includes('shop') || text.includes('store') || text.includes('boutique') || text.includes('located')));
+
+    // FAQ 3: Contact Details
+    const isContactQuestion = [
+      'contact number', 'phone number', 'whatsapp number', 'call you', 'instagram', 'how can i reach you', 'contact details', 'telephone', 'contact you', 'contact us', 'contact'
+    ].some(w => text.includes(w)) || [
+      'رقمكم', 'رقم التلفون', 'رقم الواتساب', 'انستغرامكم', 'انستقرام', 'انستغرام', 'كيف اتواصل', 'طرق التواصل', 'رقم الاتصال', 'هاتفكم', 'هاتف المحل', 'تواصل'
+    ].some(w => text.includes(w));
+
+    // FAQ 4: Delivery & Fulfillment Options (Home delivery, delivery areas & fees, in-store pickup)
+    const isDeliveryQuestion = (
+      ['home delivery', 'do you deliver', 'do you guys do home delivery', 'is delivery available', 'delivery options', 'delivery fee', 'delivery fees', 'how much is delivery', 'can you deliver', 'deliver to', 'pick up', 'pickup', 'can i pick up', 'can i pickup', 'pick up my order', 'pickup my order', 'in-store pickup', 'instore pickup', 'in store pickup'].some(w => text.includes(w))
+      || ['توصلون', 'عندكم توصيل', 'في توصيل', 'خدمة توصيل', 'توصيل منازل', 'توصيل بيوت', 'كم التوصيل', 'رسوم التوصيل', 'استلام', 'استلم من المحل', 'استلام من الفرع', 'أقدر استلم', 'اقدر استلم', 'بيك اب'].some(w => text.includes(w))
+      || (['deliver', 'delivery', 'توصيل'].some(w => text.includes(w)) && (text.includes('?') || text.includes('do you') || text.includes('can you') || text.includes('هل') || text.includes('عندكم') || text.includes('كم')))
+    ) && !text.match(/(?:مجمع|block)\s*[:]?\s*[0-9]+/i) && !text.match(/(?:طريق|road)\s*[:]?\s*[0-9]+/i);
+
+    const isFaqQuestion = isHoursQuestion || isLocationQuestion || isContactQuestion || isDeliveryQuestion;
+
+    if (!isDirectPurchase) {
+      if (isHoursQuestion) {
+        return {
+          replyText: isEnglish
+            ? `Our operating hours at Cupcake Boutique are Monday – Sunday (daily) from 8:30 AM to 9:00 PM ⏰🧁\nYou are welcome to visit our boutique in Isa Town or order for doorstep delivery across Bahrain! Would you like to view our menu or place an order?`
+            : `أوقات العمل في كب كيك بوتيك يومياً (من الإثنين إلى الأحد) من الساعة 8:30 صباحاً حتى 9:00 مساءً ⏰🧁\nيسعدنا استقبالكم في فرعنا بمدينة عيسى أو توصيل طلباتكم لكافة مناطق البحرين! شنو حاب تطلب اليوم؟`,
+          intent: 'FAQ_HOURS',
+          interactiveButtons: [
+            { id: 'btn_faq_h1', title: '🎂 كيكة الفستق الشهيرة', action: 'ADD_TO_CART', payload: 'cb_prod_pistachio_cake', variant: 'gold' },
+            { id: 'btn_faq_h2', title: '🧁 بوكس ميني كب كيك', action: 'ADD_TO_CART', payload: 'cb_prod_mini_cupcakes_box' }
+          ]
+        };
+      }
+
+      if (isLocationQuestion) {
+        return {
+          replyText: isEnglish
+            ? `Cupcake Boutique is located at Shop 5202A, Road 1238, Block 812, Isa Town, Bahrain (near Seef Mall Isa Town) 📍🧁\nWe offer both convenient in-store pickup and doorstep delivery across Bahrain. Would you like to pick up or have your order delivered?`
+            : `موقع كب كيك بوتيك: محل 5202A، طريق 1238، مجمع 812، مدينة عيسى، البحرين (بالقرب من مجمع السيف مدينة عيسى) 📍🧁\nنوفر الاستلام المباشر من الفرع والتوصيل السريع لجميع مناطق المملكة.\nهل تفضل استلام طلبك من المحل أو نوصله لباب بيتك؟`,
+          intent: 'FAQ_LOCATION',
+          interactiveButtons: [
+            { id: 'btn_faq_loc', title: '📍 مشاركة موقع التوصيل', action: 'SHARE_LOCATION', variant: 'gold' },
+            { id: 'btn_faq_menu', title: '🎂 كيكة الفستق الشهيرة', action: 'ADD_TO_CART', payload: 'cb_prod_pistachio_cake', variant: 'secondary' }
+          ]
+        };
+      }
+
+      if (isContactQuestion) {
+        return {
+          replyText: isEnglish
+            ? `We'd love to assist you! 📞🧁\n• Phone / WhatsApp: +973 1710 0130\n• Instagram: @cupcake.boutique\n• Address: Shop 5202A, Road 1238, Block 812, Isa Town\n\nHow may we help you today?`
+            : `يسعدنا تواصلك معنا دائماً في كب كيك بوتيك! 📞🧁\n• هاتف / واتساب: +973 1710 0130\n• إنستغرام: @cupcake.boutique\n• العنوان: محل 5202A، طريق 1238، مجمع 812، مدينة عيسى\n\nكيف نقدر نخدمك اليوم طال عمرك؟`,
+          intent: 'FAQ_CONTACT',
+          interactiveButtons: [
+            { id: 'btn_faq_c1', title: '🎂 طلب كيكة الفستق', action: 'ADD_TO_CART', payload: 'cb_prod_pistachio_cake', variant: 'gold' },
+            { id: 'btn_faq_c2', title: '👩‍🍳 التحدث مع موظف', action: 'REQUEST_HUMAN', variant: 'secondary' }
+          ]
+        };
+      }
+
+      if (isDeliveryQuestion) {
+        return {
+          replyText: isEnglish
+            ? `Yes! We deliver all across Bahrain, and in-store pickup is also available! 🛵🧁\n• Local Isa Town & Central Governorate (Block 812, Jid Ali, Tubli, Sanad): 0.800 BD\n• All other Bahrain areas (Riffa, Manama, Muharraq, Saar, Seef): 1.200 BD\n• In-Store Pickup: Shop 5202A, Road 1238, Block 812, Isa Town.\n\nWould you like to view our menu or place an order for delivery? 🛍️`
+            : `نعم، نوفر خدمة التوصيل السريع لجميع مناطق البحرين، وكذلك الاستلام المباشر من الفرع! 🛵🧁\n• مدينة عيسى والمحافظة الوسطى (مجمع 812، جدعلي، توبلي، سند): 0.800 BD\n• باقي مناطق البحرين (الرفاع، المنامة، المحرق، سار، السيف): 1.200 BD\n• الاستلام من المحل: متاح في محل 5202A، طريق 1238، مجمع 812، مدينة عيسى.\n\nهل تحب تستعرض المنيو أو نجهز لك طلب توصيل؟ 🛍️`,
+          intent: 'FAQ_DELIVERY',
+          interactiveButtons: [
+            { id: 'btn_faq_d1', title: '🎂 استعراض المنيو والطلب', action: 'ADD_TO_CART', payload: 'cb_prod_pistachio_cake', variant: 'gold' },
+            { id: 'btn_faq_d2', title: '📍 مشاركة موقع التوصيل', action: 'SHARE_LOCATION', variant: 'primary' }
+          ]
+        };
+      }
+    }
 
     // Recommendation Inquiry
     const isRecommendation = ['تنصح', 'شنو عندك', 'عروض', 'أشهر', 'منيو', 'recommend', 'famous', 'best', 'popular', 'menu'].some(w => text.includes(w));
-    if (isRecommendation && !isOrderIntent) {
+    if (isRecommendation && !isOrderIntent && !isFaqQuestion) {
       const pistachioCake = products.find(p => p.id === 'cb_prod_pistachio_cake');
       const cupcakesBox = products.find(p => p.id === 'cb_prod_mini_cupcakes_box');
       return {
@@ -299,7 +411,7 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
 
     // Greeting Response
     const greetingMatches = ['هلا', 'مرحبا', 'السلام', 'سلام', 'صباح الخير', 'مساء الخير', 'hello', 'hi', 'hey', 'namaste'];
-    const isGreeting = greetingMatches.some((g) => text.includes(g)) && text.length < 40 && !isOrderIntent;
+    const isGreeting = greetingMatches.some((g) => text.includes(g)) && text.length < 40 && !isOrderIntent && !isFaqQuestion;
     if (isGreeting) {
       return {
         replyText: isEnglish
@@ -512,8 +624,8 @@ You MUST respond with a pure JSON object without markdown fences, matching this 
     // General fallback
     return {
       replyText: isEnglish
-        ? `Welcome to *Cupcake Boutique* (Shop 5202A, Road 1238, Block 812, Isa Town, Bahrain)! 🧁✨\nI am *Dana*. We bake the famous Pistachio Cake, artisan cupcakes, Saffron Milk Cakes, and celebration delights.\nFeel free to ask for recommendations or tell me your order! (e.g. *"I want 1 Famous Pistachio Cake"*).`
-        : `أهلاً بك في *كب كيك بوتيك (Cupcake Boutique)* - مجمع 812، مدينة عيسى! 🧁✨\nمعك *دانة*. نقدم كيكة الفستق الشهيرة، بوكسات الميني كب كيك، كيكة الحليب بالزعفران، وكيكات المناسبات.\nتفضل اذكر طلبك مثل: *"أبي كيكة الفستق الشهيرة وبوكس كب كيك"* وراح أجهزه لك فوراً! 🛵`,
+        ? `I am at your service at *Cupcake Boutique*! 🧁✨\nYou can ask me about our operating hours, delivery options across Bahrain, store location in Isa Town, or place an order for our famous Pistachio Cake and artisan cupcakes. How can I help you today?`
+        : `أنا في خدمتك دائماً في *كب كيك بوتيك مدينة عيسى*! 🧁✨\nيسعدني إجابتك عن أوقات العمل، خدمة التوصيل لجميع مناطق البحرين، أو مساعدتك في طلب كيكة الفستق الشهيرة وبوكسات الكب كيك اللذيذة. كيف أقدر أساعدك اليوم؟`,
       intent: 'GENERAL',
       interactiveButtons: [
         { id: 'btn_pistachio_def', title: '🎂 كيكة الفستق الشهيرة (14.000 BD)', action: 'ADD_TO_CART', payload: 'cb_prod_pistachio_cake', variant: 'gold' },
